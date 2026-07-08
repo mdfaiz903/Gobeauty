@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+backend/.venv/
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
@@ -11,6 +12,7 @@ build/
 
 # Environment variables
 .env
+backend/.env
 .env.local
 .env.*.local
 

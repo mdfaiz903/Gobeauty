@@ -10,17 +10,47 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+def load_env_file(file_path):
+    if not file_path.exists():
+        return
+
+    for line in file_path.read_text().splitlines():
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        name, value = line.split('=', 1)
+        os.environ.setdefault(name.strip(), value.strip())
+
+
+def get_env(name, default=None):
+    return os.environ.get(name, default)
+
+
+def get_required_env(name):
+    value = get_env(name)
+    if value:
+        return value
+    raise RuntimeError(f'{name} environment variable is required.')
+
+
+def get_env_int(name, default):
+    return int(get_env(name, default))
+
+
+load_env_file(BASE_DIR / '.env')
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-9z-6lv8w!0*c39@zdg8)3yn&l&d$6-xml40i4@ypoeo!23loco'
+# SECURITY WARNING: keep the secret key used in production secret.
+SECRET_KEY = get_required_env('DJANGO_SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -74,8 +104,13 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': get_env('POSTGRES_DB', 'gobeauty'),
+        'USER': get_env('POSTGRES_USER', 'gobeauty'),
+        'PASSWORD': get_env('POSTGRES_PASSWORD', 'gobeauty'),
+        'HOST': get_env('POSTGRES_HOST', '127.0.0.1'),
+        'PORT': get_env_int('POSTGRES_PORT', 5432),
+        'CONN_MAX_AGE': get_env_int('POSTGRES_CONN_MAX_AGE', 60),
     }
 }
 
