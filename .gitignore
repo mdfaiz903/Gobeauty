@@ -1,6 +1,8 @@
 # Dependencies
 node_modules/
 backend/.venv/
+__pycache__/
+*.py[cod]
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
