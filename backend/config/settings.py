@@ -83,6 +83,11 @@ INSTALLED_APPS = [
     'corsheaders',
     'drf_spectacular',
     'rest_framework',
+    'accounts.apps.AccountsConfig',
+    'catalog.apps.CatalogConfig',
+    'orders.apps.OrdersConfig',
+    'payments.apps.PaymentsConfig',
+    'recommendations.apps.RecommendationsConfig',
 ]
 
 MIDDLEWARE = [
