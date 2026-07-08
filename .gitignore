@@ -15,7 +15,6 @@ build/
 backend/.env
 .env.local
 .env.*.local
-.env.example
 # IDE and Editor
 .vscode/
 .idea/
