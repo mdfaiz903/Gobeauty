@@ -1,4 +1,9 @@
+from django.core.cache import cache
+
 from catalog.models import Category, Product
+
+CATEGORY_TREE_CACHE_KEY = 'catalog:active-category-tree:v1'
+CATEGORY_TREE_CACHE_TIMEOUT = 60 * 60
 
 
 class CategoryRecommendationService:
@@ -24,6 +29,15 @@ class CategoryRecommendationService:
         return self.depth_first_category_ids(root_id, child_map)
 
     def build_child_map(self):
+        cached_tree = cache.get(CATEGORY_TREE_CACHE_KEY)
+        if cached_tree is not None:
+            return cached_tree
+
+        child_map = self.build_child_map_from_database()
+        cache.set(CATEGORY_TREE_CACHE_KEY, child_map, CATEGORY_TREE_CACHE_TIMEOUT)
+        return child_map
+
+    def build_child_map_from_database(self):
         child_map = {}
         for category in self.category_queryset.only('id', 'parent_id'):
             child_map.setdefault(category.parent_id, []).append(category.id)
@@ -54,3 +68,7 @@ class CategoryRecommendationService:
             stack.extend(reversed(children))
 
         return ordered_ids
+
+
+def invalidate_category_tree_cache():
+    cache.delete(CATEGORY_TREE_CACHE_KEY)
