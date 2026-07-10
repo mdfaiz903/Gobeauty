@@ -8,6 +8,7 @@ from catalog.serializers import (
     ProductDetailSerializer,
     ProductListSerializer,
 )
+from recommendations.services import CategoryRecommendationService
 
 
 class CategoryListView(generics.ListAPIView):
@@ -38,6 +39,24 @@ class ProductDetailView(generics.RetrieveAPIView):
             status=Product.Status.ACTIVE,
             category__is_active=True,
         ).select_related('category', 'category__parent')
+
+
+class ProductRecommendationListView(generics.ListAPIView):
+    serializer_class = ProductListSerializer
+    permission_classes = (permissions.AllowAny,)
+
+    def get_queryset(self):
+        product = self.get_product()
+        return CategoryRecommendationService().get_related_products(product)
+
+    def get_product(self):
+        return generics.get_object_or_404(
+            Product.objects.filter(
+                status=Product.Status.ACTIVE,
+                category__is_active=True,
+            ).select_related('category'),
+            pk=self.kwargs['pk'],
+        )
 
 
 class AdminProductCreateView(generics.CreateAPIView):
