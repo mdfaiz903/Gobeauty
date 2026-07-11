@@ -321,6 +321,10 @@ export default function App() {
 
   const filteredProducts = useMemo(() => {
     const next = products.filter((product) => {
+      const selectedCategory = categories.find((category) => category.name === filters.category);
+      const selectedCategoryNames = selectedCategory
+        ? [selectedCategory.name, ...selectedCategory.children]
+        : [filters.category];
       const searchTerm = filters.search.trim().toLowerCase();
       const searchText = [
         product.name,
@@ -332,7 +336,7 @@ export default function App() {
         .filter(Boolean)
         .join(' ')
         .toLowerCase();
-      const categoryOk = filters.category === 'All' || product.category === filters.category;
+      const categoryOk = filters.category === 'All' || selectedCategoryNames.includes(product.category);
       const brandOk = filters.brand === 'All' || product.brand === filters.brand;
       const skinOk = filters.skinType === 'All' || product.skinType.includes(filters.skinType);
       const availableOk = filters.availability === 'All' || product.stock > 0;
@@ -345,7 +349,7 @@ export default function App() {
     if (filters.sort === 'newest') return [...next].reverse();
     if (filters.sort === 'best-selling') return [...next].sort((a, b) => b.reviews - a.reviews);
     return next;
-  }, [filters, products]);
+  }, [categories, filters, products]);
 
   useEffect(() => {
     loadCatalog();
@@ -560,6 +564,7 @@ export default function App() {
           <ProductsPage
             products={filteredProducts}
             allProducts={products}
+            categories={categories}
             catalogStatus={catalogStatus}
             filters={filters}
             onFilterChange={setFilters}
@@ -668,7 +673,13 @@ function Header({
           <div className="mega-menu">
             {categories.map((category) => (
               <div key={category.slug || category.name}>
-                <strong>{category.name}</strong>
+                <button
+                  type="button"
+                  className="mega-root"
+                  onClick={() => onCategoryBrowse(category.name)}
+                >
+                  {category.name}
+                </button>
                 {(category.children.length ? category.children : ['All products']).map((child) => (
                   <button
                     key={child}
@@ -782,7 +793,7 @@ function HomePage({
           <button
             key={category.slug || category.name}
             type="button"
-            onClick={() => onCategoryBrowse(category.children[0] || 'All')}
+            onClick={() => onCategoryBrowse(category.name)}
           >
             <span>{category.name}</span>
             <small>{category.children.slice(0, 3).join(' / ') || 'All products'}</small>
@@ -825,13 +836,19 @@ function HomePage({
 function ProductsPage({
   products,
   allProducts,
+  categories,
   catalogStatus,
   filters,
   onFilterChange,
   onProductOpen,
   onAddToCart,
 }) {
-  const categoryOptions = ['All', ...new Set(allProducts.map((product) => product.category))];
+  const categoryOptions = [
+    'All',
+    ...new Set(
+      categories.flatMap((category) => [category.name, ...category.children]),
+    ),
+  ];
   const brandOptions = ['All', ...new Set(allProducts.map((product) => product.brand))];
 
   return (

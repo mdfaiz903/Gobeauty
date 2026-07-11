@@ -160,10 +160,10 @@ img {
   border-radius: 8px;
   box-shadow: var(--shadow);
   display: grid;
-  gap: 24px;
-  grid-template-columns: repeat(3, minmax(150px, 1fr));
+  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   left: 0;
-  min-width: 620px;
+  min-width: min(720px, 82vw);
   opacity: 0;
   padding: 22px;
   pointer-events: none;
@@ -180,17 +180,26 @@ img {
   transform: translateY(0);
 }
 
-.mega-menu strong {
+.mega-root {
+  color: var(--ink);
   display: block;
-  margin-bottom: 8px;
+  font-weight: 900;
+  margin-bottom: 10px;
+  padding: 0 0 8px;
+  text-align: left;
+  width: 100%;
 }
 
 .mega-menu button {
   color: var(--muted);
   display: block;
-  padding: 7px 0;
+  padding: 8px 0;
   text-align: left;
   width: 100%;
+}
+
+.mega-menu button:hover {
+  color: var(--rose-dark);
 }
 
 .header-actions {
