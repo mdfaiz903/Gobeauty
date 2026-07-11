@@ -209,14 +209,20 @@ function clearStoredTokens() {
 }
 
 async function apiRequest(path, { method = 'GET', token, body } = {}) {
-  const response = await fetch(buildApiUrl(path), {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  let response;
+
+  try {
+    response = await fetch(buildApiUrl(path), {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    throw new Error(`Backend API is not reachable at ${API_BASE_URL}. Start Django or update VITE_API_BASE_URL.`);
+  }
 
   if (response.status === 204) return null;
 
