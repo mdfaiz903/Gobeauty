@@ -300,8 +300,11 @@ export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [tokens, setTokens] = useState(readStoredTokens);
   const [authUser, setAuthUser] = useState(null);
+  const [authStatus, setAuthStatus] = useState('idle');
   const [authMessage, setAuthMessage] = useState('');
   const [orders, setOrders] = useState([]);
+  const [ordersStatus, setOrdersStatus] = useState('idle');
+  const [productStatus, setProductStatus] = useState('idle');
   const [checkoutState, setCheckoutState] = useState({ status: 'idle', message: '' });
 
   const cartCount = cart.reduce((sum, item) => sum + item.qty, 0);
@@ -333,6 +336,7 @@ export default function App() {
   }, [tokens]);
 
   async function loadCatalog() {
+    setCatalogStatus('loading');
     try {
       const [categoryData, productData] = await Promise.all([
         apiRequest('/categories/'),
@@ -349,22 +353,31 @@ export default function App() {
   }
 
   async function loadCurrentUser(accessToken) {
+    setAuthStatus('loading');
     try {
       const user = await apiRequest('/auth/me/', { token: accessToken });
       setAuthUser(user);
       setAuthMessage('');
       await loadOrders(accessToken);
+      setAuthStatus('idle');
     } catch {
       clearStoredTokens();
       setTokens(null);
       setAuthUser(null);
+      setAuthStatus('idle');
     }
   }
 
   async function loadOrders(accessToken = tokens?.access) {
     if (!accessToken) return;
-    const orderData = await apiRequest('/orders/', { token: accessToken });
-    setOrders(listFromApi(orderData));
+    setOrdersStatus('loading');
+    try {
+      const orderData = await apiRequest('/orders/', { token: accessToken });
+      setOrders(listFromApi(orderData));
+      setOrdersStatus('ready');
+    } catch {
+      setOrdersStatus('error');
+    }
   }
 
   function navigate(nextView) {
@@ -378,6 +391,7 @@ export default function App() {
     const fallbackRelated = products.filter((item) => item.id !== product.id).slice(0, 3);
     setSelectedProduct(product);
     setRelatedProducts(fallbackRelated);
+    setProductStatus('loading');
     navigate('product');
 
     try {
@@ -388,8 +402,10 @@ export default function App() {
       setSelectedProduct(enrichProduct(detailData));
       const recommendations = listFromApi(recommendationData).map(enrichProduct);
       setRelatedProducts(recommendations.length ? recommendations : fallbackRelated);
+      setProductStatus('ready');
     } catch {
       setRelatedProducts(fallbackRelated);
+      setProductStatus('fallback');
     }
   }
 
@@ -417,6 +433,7 @@ export default function App() {
   }
 
   async function login(credentials) {
+    setAuthStatus('loading');
     setAuthMessage('Signing in...');
     try {
       const data = await apiRequest('/auth/login/', { method: 'POST', body: credentials });
@@ -426,18 +443,22 @@ export default function App() {
       setAuthUser(data.user);
       setAuthMessage('Logged in successfully.');
       await loadOrders(nextTokens.access);
+      setAuthStatus('idle');
     } catch (error) {
       setAuthMessage(error.message);
+      setAuthStatus('idle');
     }
   }
 
   async function register(payload) {
+    setAuthStatus('loading');
     setAuthMessage('Creating account...');
     try {
       await apiRequest('/auth/register/', { method: 'POST', body: payload });
       await login({ email: payload.email, password: payload.password });
     } catch (error) {
       setAuthMessage(error.message);
+      setAuthStatus('idle');
     }
   }
 
@@ -505,6 +526,7 @@ export default function App() {
           <ProductsPage
             products={filteredProducts}
             allProducts={products}
+            catalogStatus={catalogStatus}
             filters={filters}
             onFilterChange={setFilters}
             onProductOpen={openProduct}
@@ -515,6 +537,7 @@ export default function App() {
           <ProductDetail
             product={selectedProduct}
             relatedProducts={relatedProducts}
+            productStatus={productStatus}
             onAddToCart={addToCart}
             onProductOpen={openProduct}
           />
@@ -535,6 +558,8 @@ export default function App() {
           <AccountPage
             user={authUser}
             orders={orders}
+            authStatus={authStatus}
+            ordersStatus={ordersStatus}
             message={authMessage || checkoutState.message}
             onLogin={login}
             onRegister={register}
@@ -665,10 +690,16 @@ function HomePage({ categories, products, catalogStatus, onNavigate, onProductOp
         </div>
       </section>
 
+      {catalogStatus === 'loading' && (
+        <StatusBanner title="Loading live catalog" message="Products and categories are syncing from the backend API." />
+      )}
+
       {catalogStatus === 'fallback' && (
-        <div className="empty-state compact">
-          <p>Backend is offline, so the storefront is showing local demo products.</p>
-        </div>
+        <StatusBanner
+          tone="warning"
+          title="Demo catalog active"
+          message="Backend catalog is unavailable, so the storefront is showing local demo products."
+        />
       )}
 
       <section className="category-strip">
@@ -712,7 +743,15 @@ function HomePage({ categories, products, catalogStatus, onNavigate, onProductOp
   );
 }
 
-function ProductsPage({ products, allProducts, filters, onFilterChange, onProductOpen, onAddToCart }) {
+function ProductsPage({
+  products,
+  allProducts,
+  catalogStatus,
+  filters,
+  onFilterChange,
+  onProductOpen,
+  onAddToCart,
+}) {
   const categoryOptions = ['All', ...new Set(allProducts.map((product) => product.category))];
   const brandOptions = ['All', ...new Set(allProducts.map((product) => product.brand))];
 
@@ -754,6 +793,7 @@ function ProductsPage({ products, allProducts, filters, onFilterChange, onProduc
       </aside>
 
       <div className="catalog-main">
+        {catalogStatus === 'loading' && <ProductSkeletonGrid />}
         <div className="catalog-toolbar">
           <div>
             <p>Product listing</p>
@@ -789,6 +829,29 @@ function FilterSelect({ label, value, options, onChange }) {
         ))}
       </select>
     </label>
+  );
+}
+
+function StatusBanner({ title, message, tone = 'info' }) {
+  return (
+    <div className={`status-banner ${tone}`}>
+      <strong>{title}</strong>
+      <span>{message}</span>
+    </div>
+  );
+}
+
+function ProductSkeletonGrid() {
+  return (
+    <div className="skeleton-grid" aria-label="Loading product cards">
+      {[1, 2, 3, 4].map((item) => (
+        <div key={item} className="skeleton-card">
+          <span />
+          <strong />
+          <small />
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -844,7 +907,7 @@ function ProductCard({ product, onOpen, onAdd }) {
   );
 }
 
-function ProductDetail({ product, relatedProducts, onAddToCart, onProductOpen }) {
+function ProductDetail({ product, relatedProducts, productStatus, onAddToCart, onProductOpen }) {
   return (
     <section className="product-detail page-pad">
       <div className="gallery-panel">
@@ -900,6 +963,16 @@ function ProductDetail({ product, relatedProducts, onAddToCart, onProductOpen })
 
       <div className="related-row">
         <SectionHeading label="You may also like" title="Related products" />
+        {productStatus === 'loading' && (
+          <StatusBanner title="Finding recommendations" message="Loading DFS-based related products from the backend." />
+        )}
+        {productStatus === 'fallback' && (
+          <StatusBanner
+            tone="warning"
+            title="Local recommendations"
+            message="Recommendation API is unavailable, so nearby catalog products are shown."
+          />
+        )}
         <ProductGrid products={relatedProducts} onProductOpen={onProductOpen} onAddToCart={onAddToCart} />
       </div>
     </section>
@@ -937,9 +1010,7 @@ function CheckoutPage({ cart, total, checkoutState, isAuthenticated, onSubmit })
           </label>
           <label>
             Payment method
-            <select defaultValue="pending" disabled>
-              <option value="pending">Payment gateway next phase</option>
-            </select>
+            <PaymentPlaceholder />
           </label>
           {checkoutState.message && <p className="form-message">{checkoutState.message}</p>}
           <button
@@ -957,7 +1028,23 @@ function CheckoutPage({ cart, total, checkoutState, isAuthenticated, onSubmit })
   );
 }
 
-function AccountPage({ user, orders, message, onLogin, onRegister, onLogout }) {
+function PaymentPlaceholder() {
+  return (
+    <div className="payment-placeholder">
+      <div>
+        <strong>Payment gateway placeholder</strong>
+        <span>Stripe and bKash strategy flow will attach here in Phase 5.</span>
+      </div>
+      <ol>
+        <li>Order created by backend</li>
+        <li>Payment provider selected</li>
+        <li>Webhook confirms stock reduction</li>
+      </ol>
+    </div>
+  );
+}
+
+function AccountPage({ user, orders, authStatus, ordersStatus, message, onLogin, onRegister, onLogout }) {
   const [mode, setMode] = useState('login');
   const [form, setForm] = useState({
     email: '',
@@ -986,11 +1073,14 @@ function AccountPage({ user, orders, message, onLogin, onRegister, onLogout }) {
           <p>Customer account</p>
           <h1>{user.email}</h1>
           {message && <p className="form-message">{message}</p>}
+          {authStatus === 'loading' && (
+            <StatusBanner title="Checking session" message="Refreshing your account details." />
+          )}
           <button type="button" className="secondary-button wide" onClick={onLogout}>
             Logout
           </button>
         </div>
-        <OrderHistory orders={orders} />
+        <OrderHistory orders={orders} ordersStatus={ordersStatus} />
       </section>
     );
   }
@@ -1034,8 +1124,8 @@ function AccountPage({ user, orders, message, onLogin, onRegister, onLogout }) {
             />
           </label>
           {message && <p className="form-message">{message}</p>}
-          <button type="submit" className="primary-button wide">
-            {mode === 'login' ? 'Login' : 'Create account'}
+          <button type="submit" className="primary-button wide" disabled={authStatus === 'loading'}>
+            {authStatus === 'loading' ? 'Please wait...' : mode === 'login' ? 'Login' : 'Create account'}
           </button>
           <button
             type="button"
@@ -1046,16 +1136,30 @@ function AccountPage({ user, orders, message, onLogin, onRegister, onLogout }) {
           </button>
         </form>
       </div>
-      <OrderHistory orders={[]} />
+      <OrderHistory orders={[]} ordersStatus="idle" />
     </section>
   );
 }
 
-function OrderHistory({ orders }) {
+function OrderHistory({ orders, ordersStatus }) {
   return (
     <div className="order-history">
       <h2>Recent orders</h2>
-      {!orders.length && (
+      {ordersStatus === 'loading' && (
+        <article>
+          <strong>Loading orders</strong>
+          <span>Syncing</span>
+          <p>Order history is being fetched from the backend.</p>
+        </article>
+      )}
+      {ordersStatus === 'error' && (
+        <article>
+          <strong>Order history unavailable</strong>
+          <span>Retry later</span>
+          <p>The account is active, but the order API did not respond.</p>
+        </article>
+      )}
+      {ordersStatus !== 'loading' && ordersStatus !== 'error' && !orders.length && (
         <article>
           <strong>No orders yet</strong>
           <span>Ready</span>
