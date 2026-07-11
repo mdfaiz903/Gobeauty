@@ -37,7 +37,7 @@ class OrderCreationService:
 
     def get_products_by_id(self, cart_items):
         product_ids = [item['product_id'] for item in cart_items]
-        products = Product.objects.in_bulk(product_ids)
+        products = Product.objects.select_for_update().in_bulk(product_ids)
         missing_ids = set(product_ids) - set(products.keys())
         if missing_ids:
             raise ValidationError({'items': f'Products not found: {sorted(missing_ids)}'})
@@ -50,8 +50,7 @@ class OrderCreationService:
         ]
 
     def build_order_item_data(self, product, quantity):
-        if product.status != Product.Status.ACTIVE:
-            raise ValidationError({'items': f'Product is inactive: {product.sku}'})
+        self.validate_product_is_orderable(product, quantity)
 
         subtotal = product.price * quantity
         return {
@@ -60,6 +59,14 @@ class OrderCreationService:
             'price': product.price,
             'subtotal': subtotal,
         }
+
+    def validate_product_is_orderable(self, product, quantity):
+        if product.status != Product.Status.ACTIVE:
+            raise ValidationError({'items': f'Product is inactive: {product.sku}'})
+        if product.stock < quantity:
+            raise ValidationError(
+                {'items': f'Insufficient stock for {product.sku}. Available: {product.stock}'},
+            )
 
     def calculate_total(self, order_items):
         return sum((item['subtotal'] for item in order_items), Decimal('0.00'))
