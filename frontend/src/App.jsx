@@ -181,6 +181,7 @@ const filtersInitial = {
   brand: 'All',
   skinType: 'All',
   availability: 'All',
+  search: '',
   sort: 'featured',
 };
 
@@ -318,11 +319,23 @@ export default function App() {
 
   const filteredProducts = useMemo(() => {
     const next = products.filter((product) => {
+      const searchTerm = filters.search.trim().toLowerCase();
+      const searchText = [
+        product.name,
+        product.brand,
+        product.category,
+        product.sku,
+        product.description,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
       const categoryOk = filters.category === 'All' || product.category === filters.category;
       const brandOk = filters.brand === 'All' || product.brand === filters.brand;
       const skinOk = filters.skinType === 'All' || product.skinType.includes(filters.skinType);
       const availableOk = filters.availability === 'All' || product.stock > 0;
-      return categoryOk && brandOk && skinOk && availableOk;
+      const searchOk = !searchTerm || searchText.includes(searchTerm);
+      return categoryOk && brandOk && skinOk && availableOk && searchOk;
     });
 
     if (filters.sort === 'price-low') return [...next].sort((a, b) => a.price - b.price);
@@ -391,6 +404,11 @@ export default function App() {
     setCartOpen(false);
     setMobileMenuOpen(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function searchProducts(search) {
+    setFilters({ ...filtersInitial, search: search.trim() });
+    navigate('products');
   }
 
   async function openProduct(product) {
@@ -513,6 +531,7 @@ export default function App() {
         currentView={view}
         onNavigate={navigate}
         onCartOpen={() => setCartOpen(true)}
+        onSearch={searchProducts}
         mobileMenuOpen={mobileMenuOpen}
         onMobileToggle={() => setMobileMenuOpen((open) => !open)}
       />
@@ -605,14 +624,23 @@ function Header({
   currentView,
   onNavigate,
   onCartOpen,
+  onSearch,
   mobileMenuOpen,
   onMobileToggle,
 }) {
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchValue, setSearchValue] = useState('');
   const navItems = [
     ['home', 'Home'],
     ['products', 'Products'],
     ['account', 'Account'],
   ];
+
+  function submitSearch(event) {
+    event.preventDefault();
+    onSearch(searchValue);
+    setSearchOpen(false);
+  }
 
   return (
     <header className="site-header">
@@ -623,11 +651,6 @@ function Header({
           <small>Skincare, makeup, hair & body</small>
         </span>
       </div>
-
-      <label className="header-search">
-        <span />
-        <input type="search" placeholder="Search products" onFocus={() => onNavigate('products')} />
-      </label>
 
       <nav className={`main-nav ${mobileMenuOpen ? 'is-open' : ''}`}>
         <div className="mega-trigger">
@@ -658,9 +681,27 @@ function Header({
       </nav>
 
       <div className="header-actions">
-        <button className="icon-button search-button" type="button" aria-label="Search products">
+        <button
+          className="icon-button search-button"
+          type="button"
+          aria-expanded={searchOpen}
+          aria-label="Search products"
+          onClick={() => setSearchOpen((open) => !open)}
+        >
           <span />
         </button>
+        {searchOpen && (
+          <form className="header-search-panel" onSubmit={submitSearch}>
+            <input
+              autoFocus
+              type="search"
+              value={searchValue}
+              placeholder="Search products"
+              onChange={(event) => setSearchValue(event.target.value)}
+            />
+            <button type="submit">Search</button>
+          </form>
+        )}
         <button className="cart-button" type="button" onClick={onCartOpen}>
           Cart <strong>{cartCount}</strong>
         </button>
