@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.db import transaction
 from rest_framework.exceptions import ValidationError
 
@@ -11,14 +13,27 @@ class OrderCreationService:
 
     @transaction.atomic
     def create_order(self, cart_items):
-        products = self.get_products_by_id(cart_items)
-        order_items = self.build_order_items(cart_items, products)
+        normalized_items = self.normalize_cart_items(cart_items)
+        products = self.get_products_by_id(normalized_items)
+        order_items = self.build_order_items(normalized_items, products)
         order = Order.objects.create(
             user=self.user,
             total_amount=self.calculate_total(order_items),
         )
         self.save_order_items(order, order_items)
         return order
+
+    def normalize_cart_items(self, cart_items):
+        quantities_by_product = {}
+        for item in cart_items:
+            product_id = item['product_id']
+            quantities_by_product[product_id] = (
+                quantities_by_product.get(product_id, 0) + item['quantity']
+            )
+        return [
+            {'product_id': product_id, 'quantity': quantity}
+            for product_id, quantity in quantities_by_product.items()
+        ]
 
     def get_products_by_id(self, cart_items):
         product_ids = [item['product_id'] for item in cart_items]
@@ -47,7 +62,7 @@ class OrderCreationService:
         }
 
     def calculate_total(self, order_items):
-        return sum(item['subtotal'] for item in order_items)
+        return sum((item['subtotal'] for item in order_items), Decimal('0.00'))
 
     def save_order_items(self, order, order_items):
         OrderItem.objects.bulk_create(
