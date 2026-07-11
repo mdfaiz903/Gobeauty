@@ -45,11 +45,11 @@ class OrderCreationService:
 
     def build_order_items(self, cart_items, products):
         return [
-            self.build_order_item_data(products[item['product_id']], item['quantity'])
+            self.build_order_item_snapshot(products[item['product_id']], item['quantity'])
             for item in cart_items
         ]
 
-    def build_order_item_data(self, product, quantity):
+    def build_order_item_snapshot(self, product, quantity):
         self.validate_product_is_orderable(product, quantity)
 
         subtotal = product.price * quantity
