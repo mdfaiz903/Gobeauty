@@ -1,6 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
-const categories = [
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api';
+const TOKEN_STORAGE_KEY = 'gobeauty.auth.tokens';
+
+const fallbackCategories = [
   {
     name: 'Skincare',
     slug: 'skincare',
@@ -18,19 +21,12 @@ const categories = [
   },
 ];
 
-const products = [
-  {
-    id: 1,
-    slug: 'glow-guard-spf50',
-    name: 'Glow Guard SPF 50 PA++++',
+const productVisuals = {
+  'GBL-SPF-001': {
     brand: 'Go Beauty Lab',
-    category: 'Skincare',
     skinType: ['Oily', 'Combination'],
-    price: 1450,
-    compareAt: 1750,
     rating: 4.8,
     reviews: 128,
-    stock: 34,
     badge: 'Best seller',
     image:
       'https://images.unsplash.com/photo-1556228578-8c89e6adf883?auto=format&fit=crop&w=900&q=80',
@@ -38,21 +34,12 @@ const products = [
       'https://images.unsplash.com/photo-1556228578-8c89e6adf883?auto=format&fit=crop&w=900&q=80',
       'https://images.unsplash.com/photo-1598440947619-2c35fc9aa908?auto=format&fit=crop&w=900&q=80',
     ],
-    description:
-      'A lightweight daily sunscreen made for humid Bangladesh weather with a soft, no-white-cast finish.',
   },
-  {
-    id: 2,
-    slug: 'rice-ceramide-barrier-cream',
-    name: 'Rice Ceramide Barrier Cream',
+  'BOJ-CREAM-001': {
     brand: 'Beauty of Joseon',
-    category: 'Skincare',
     skinType: ['Dry', 'Sensitive'],
-    price: 1890,
-    compareAt: 2150,
     rating: 4.7,
     reviews: 94,
-    stock: 21,
     badge: 'Imported',
     image:
       'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&w=900&q=80',
@@ -60,21 +47,12 @@ const products = [
       'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&w=900&q=80',
       'https://images.unsplash.com/photo-1570194065650-d99fb4d8a609?auto=format&fit=crop&w=900&q=80',
     ],
-    description:
-      'A rich moisturizer for dry and sensitive skin that helps support the skin barrier without heaviness.',
   },
-  {
-    id: 3,
-    slug: 'niacinamide-10-serum',
-    name: 'Niacinamide 10% Clarity Serum',
+  'ORD-SERUM-001': {
     brand: 'The Ordinary',
-    category: 'Skincare',
     skinType: ['Oily', 'Acne Prone'],
-    price: 1320,
-    compareAt: 1500,
     rating: 4.6,
     reviews: 211,
-    stock: 48,
     badge: 'Trending',
     image:
       'https://images.unsplash.com/photo-1608248597279-f99d160bfcbc?auto=format&fit=crop&w=900&q=80',
@@ -82,21 +60,12 @@ const products = [
       'https://images.unsplash.com/photo-1608248597279-f99d160bfcbc?auto=format&fit=crop&w=900&q=80',
       'https://images.unsplash.com/photo-1629198735660-e39ea93f5c18?auto=format&fit=crop&w=900&q=80',
     ],
-    description:
-      'A simple everyday serum for visible pores, oil balance, and uneven tone.',
   },
-  {
-    id: 4,
-    slug: 'fresh-rose-cleansing-gel',
-    name: 'Fresh Rose Cleansing Gel',
+  'GBL-CLEAN-001': {
     brand: 'Go Beauty Lab',
-    category: 'Skincare',
     skinType: ['Normal', 'Combination'],
-    price: 890,
-    compareAt: 1050,
     rating: 4.5,
     reviews: 63,
-    stock: 0,
     badge: 'Restocking',
     image:
       'https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?auto=format&fit=crop&w=900&q=80',
@@ -104,21 +73,12 @@ const products = [
       'https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?auto=format&fit=crop&w=900&q=80',
       'https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=900&q=80',
     ],
-    description:
-      'A gentle gel cleanser that removes sweat, sunscreen, and daily buildup without stripping the skin.',
   },
-  {
-    id: 5,
-    slug: 'velvet-matte-lip-tint',
-    name: 'Velvet Matte Lip Tint',
+  'ROM-LIP-001': {
     brand: 'Rom&nd',
-    category: 'Makeup',
     skinType: ['All'],
-    price: 980,
-    compareAt: 1200,
     rating: 4.9,
     reviews: 156,
-    stock: 39,
     badge: 'New shades',
     image:
       'https://images.unsplash.com/photo-1586495777744-4413f21062fa?auto=format&fit=crop&w=900&q=80',
@@ -126,21 +86,12 @@ const products = [
       'https://images.unsplash.com/photo-1586495777744-4413f21062fa?auto=format&fit=crop&w=900&q=80',
       'https://images.unsplash.com/photo-1631214540553-ff044a3ff5d4?auto=format&fit=crop&w=900&q=80',
     ],
-    description:
-      'Soft blur lip color with long wear, comfortable pigment, and shades that flatter South Asian skin tones.',
   },
-  {
-    id: 6,
-    slug: 'repair-hair-mask',
-    name: 'Keratin Repair Hair Mask',
+  'LDR-HAIR-001': {
     brand: 'Lador',
-    category: 'Hair & Body',
     skinType: ['All'],
-    price: 1680,
-    compareAt: 1900,
     rating: 4.4,
     reviews: 77,
-    stock: 18,
     badge: 'Salon care',
     image:
       'https://images.unsplash.com/photo-1522338242992-e1a54906a8da?auto=format&fit=crop&w=900&q=80',
@@ -148,10 +99,82 @@ const products = [
       'https://images.unsplash.com/photo-1522338242992-e1a54906a8da?auto=format&fit=crop&w=900&q=80',
       'https://images.unsplash.com/photo-1617897903246-719242758050?auto=format&fit=crop&w=900&q=80',
     ],
+  },
+};
+
+const fallbackProducts = [
+  {
+    id: 1,
+    sku: 'GBL-SPF-001',
+    slug: 'glow-guard-spf50',
+    name: 'Glow Guard SPF 50 PA++++',
+    category: 'Skincare',
+    price: 1450,
+    compareAt: 1750,
+    stock: 34,
+    description:
+      'A lightweight daily sunscreen made for humid Bangladesh weather with a soft, no-white-cast finish.',
+  },
+  {
+    id: 2,
+    sku: 'BOJ-CREAM-001',
+    slug: 'rice-ceramide-barrier-cream',
+    name: 'Rice Ceramide Barrier Cream',
+    category: 'Skincare',
+    price: 1890,
+    compareAt: 2150,
+    stock: 21,
+    description:
+      'A rich moisturizer for dry and sensitive skin that helps support the skin barrier without heaviness.',
+  },
+  {
+    id: 3,
+    sku: 'ORD-SERUM-001',
+    slug: 'niacinamide-10-serum',
+    name: 'Niacinamide 10% Clarity Serum',
+    category: 'Skincare',
+    price: 1320,
+    compareAt: 1500,
+    stock: 48,
+    description: 'A simple everyday serum for visible pores, oil balance, and uneven tone.',
+  },
+  {
+    id: 4,
+    sku: 'GBL-CLEAN-001',
+    slug: 'fresh-rose-cleansing-gel',
+    name: 'Fresh Rose Cleansing Gel',
+    category: 'Skincare',
+    price: 890,
+    compareAt: 1050,
+    stock: 0,
+    description:
+      'A gentle gel cleanser that removes sweat, sunscreen, and daily buildup without stripping the skin.',
+  },
+  {
+    id: 5,
+    sku: 'ROM-LIP-001',
+    slug: 'velvet-matte-lip-tint',
+    name: 'Velvet Matte Lip Tint',
+    category: 'Makeup',
+    price: 980,
+    compareAt: 1200,
+    stock: 39,
+    description:
+      'Soft blur lip color with long wear, comfortable pigment, and shades that flatter South Asian skin tones.',
+  },
+  {
+    id: 6,
+    sku: 'LDR-HAIR-001',
+    slug: 'repair-hair-mask',
+    name: 'Keratin Repair Hair Mask',
+    category: 'Hair & Body',
+    price: 1680,
+    compareAt: 1900,
+    stock: 18,
     description:
       'A weekly treatment for dry, heat-styled, or colored hair that needs softness and shine.',
   },
-];
+].map(enrichProduct);
 
 const filtersInitial = {
   category: 'All',
@@ -162,16 +185,124 @@ const filtersInitial = {
 };
 
 function formatPrice(value) {
-  return `Tk ${value.toLocaleString('en-BD')}`;
+  return `Tk ${Number(value || 0).toLocaleString('en-BD')}`;
+}
+
+function buildApiUrl(path) {
+  return `${API_BASE_URL}${path}`;
+}
+
+function readStoredTokens() {
+  try {
+    return JSON.parse(localStorage.getItem(TOKEN_STORAGE_KEY)) || null;
+  } catch {
+    return null;
+  }
+}
+
+function storeTokens(tokens) {
+  localStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(tokens));
+}
+
+function clearStoredTokens() {
+  localStorage.removeItem(TOKEN_STORAGE_KEY);
+}
+
+async function apiRequest(path, { method = 'GET', token, body } = {}) {
+  const response = await fetch(buildApiUrl(path), {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  if (response.status === 204) return null;
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = data.detail || data.error || Object.values(data).flat().join(' ') || 'Request failed.';
+    throw new Error(message);
+  }
+
+  return data;
+}
+
+function listFromApi(data) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.results)) return data.results;
+  return [];
+}
+
+function slugify(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+}
+
+function enrichProduct(product) {
+  const categoryName = product.category?.name || product.category || 'Skincare';
+  const price = Number(product.price || 0);
+  const visual = productVisuals[product.sku] || {};
+  const image =
+    visual.image ||
+    'https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=900&q=80';
+
+  return {
+    ...product,
+    category: categoryName,
+    categoryId: product.category?.id || product.category_id,
+    slug: product.slug || slugify(product.name),
+    brand: product.brand || visual.brand || 'Go Beauty Lab',
+    skinType: product.skinType || visual.skinType || ['All'],
+    price,
+    compareAt: Number(product.compareAt || Math.round(price * 1.18)),
+    rating: product.rating || visual.rating || 4.5,
+    reviews: product.reviews || visual.reviews || 24,
+    badge: product.stock > 0 ? visual.badge || 'Available' : 'Out of stock',
+    image,
+    gallery: visual.gallery || [image],
+    description: product.description || 'Authentic beauty product available from Go Beauty Bangladesh.',
+  };
+}
+
+function buildCategoryTree(apiCategories) {
+  const categories = listFromApi(apiCategories);
+  if (!categories.length) return fallbackCategories;
+
+  const childrenByParent = categories.reduce((groups, category) => {
+    const parentKey = category.parent || 'root';
+    return { ...groups, [parentKey]: [...(groups[parentKey] || []), category] };
+  }, {});
+
+  const roots = childrenByParent.root || categories.filter((category) => !category.parent);
+
+  return roots.map((category) => ({
+    name: category.name,
+    slug: category.slug,
+    children: (childrenByParent[category.id] || []).map((child) => child.name),
+  }));
 }
 
 export default function App() {
   const [view, setView] = useState('home');
   const [filters, setFilters] = useState(filtersInitial);
-  const [selectedProduct, setSelectedProduct] = useState(products[0]);
+  const [categories, setCategories] = useState(fallbackCategories);
+  const [products, setProducts] = useState(fallbackProducts);
+  const [catalogStatus, setCatalogStatus] = useState('loading');
+  const [selectedProduct, setSelectedProduct] = useState(fallbackProducts[0]);
+  const [relatedProducts, setRelatedProducts] = useState([]);
   const [cart, setCart] = useState([]);
   const [cartOpen, setCartOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [tokens, setTokens] = useState(readStoredTokens);
+  const [authUser, setAuthUser] = useState(null);
+  const [authMessage, setAuthMessage] = useState('');
+  const [orders, setOrders] = useState([]);
+  const [checkoutState, setCheckoutState] = useState({ status: 'idle', message: '' });
 
   const cartCount = cart.reduce((sum, item) => sum + item.qty, 0);
   const cartTotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
@@ -190,7 +321,51 @@ export default function App() {
     if (filters.sort === 'newest') return [...next].reverse();
     if (filters.sort === 'best-selling') return [...next].sort((a, b) => b.reviews - a.reviews);
     return next;
-  }, [filters]);
+  }, [filters, products]);
+
+  useEffect(() => {
+    loadCatalog();
+  }, []);
+
+  useEffect(() => {
+    if (!tokens?.access) return;
+    loadCurrentUser(tokens.access);
+  }, [tokens]);
+
+  async function loadCatalog() {
+    try {
+      const [categoryData, productData] = await Promise.all([
+        apiRequest('/categories/'),
+        apiRequest('/products/'),
+      ]);
+      const nextProducts = listFromApi(productData).map(enrichProduct);
+      setCategories(buildCategoryTree(categoryData));
+      setProducts(nextProducts.length ? nextProducts : fallbackProducts);
+      setSelectedProduct(nextProducts[0] || fallbackProducts[0]);
+      setCatalogStatus('ready');
+    } catch {
+      setCatalogStatus('fallback');
+    }
+  }
+
+  async function loadCurrentUser(accessToken) {
+    try {
+      const user = await apiRequest('/auth/me/', { token: accessToken });
+      setAuthUser(user);
+      setAuthMessage('');
+      await loadOrders(accessToken);
+    } catch {
+      clearStoredTokens();
+      setTokens(null);
+      setAuthUser(null);
+    }
+  }
+
+  async function loadOrders(accessToken = tokens?.access) {
+    if (!accessToken) return;
+    const orderData = await apiRequest('/orders/', { token: accessToken });
+    setOrders(listFromApi(orderData));
+  }
 
   function navigate(nextView) {
     setView(nextView);
@@ -199,21 +374,34 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  function openProduct(product) {
+  async function openProduct(product) {
+    const fallbackRelated = products.filter((item) => item.id !== product.id).slice(0, 3);
     setSelectedProduct(product);
+    setRelatedProducts(fallbackRelated);
     navigate('product');
+
+    try {
+      const [detailData, recommendationData] = await Promise.all([
+        apiRequest(`/products/${product.id}/`),
+        apiRequest(`/products/${product.id}/recommendations/`),
+      ]);
+      setSelectedProduct(enrichProduct(detailData));
+      const recommendations = listFromApi(recommendationData).map(enrichProduct);
+      setRelatedProducts(recommendations.length ? recommendations : fallbackRelated);
+    } catch {
+      setRelatedProducts(fallbackRelated);
+    }
   }
 
   function addToCart(product) {
     if (product.stock === 0) return;
     setCart((items) => {
       const found = items.find((item) => item.id === product.id);
-      if (found) {
-        return items.map((item) =>
-          item.id === product.id ? { ...item, qty: item.qty + 1 } : item,
-        );
-      }
-      return [...items, { ...product, qty: 1 }];
+      if (!found) return [...items, { ...product, qty: 1 }];
+
+      return items.map((item) =>
+        item.id === product.id ? { ...item, qty: Math.min(item.stock, item.qty + 1) } : item,
+      );
     });
     setCartOpen(true);
   }
@@ -221,15 +409,79 @@ export default function App() {
   function updateQty(id, delta) {
     setCart((items) =>
       items
-        .map((item) => (item.id === id ? { ...item, qty: Math.max(0, item.qty + delta) } : item))
+        .map((item) =>
+          item.id === id ? { ...item, qty: Math.max(0, Math.min(item.stock, item.qty + delta)) } : item,
+        )
         .filter((item) => item.qty > 0),
     );
+  }
+
+  async function login(credentials) {
+    setAuthMessage('Signing in...');
+    try {
+      const data = await apiRequest('/auth/login/', { method: 'POST', body: credentials });
+      const nextTokens = { access: data.access, refresh: data.refresh };
+      storeTokens(nextTokens);
+      setTokens(nextTokens);
+      setAuthUser(data.user);
+      setAuthMessage('Logged in successfully.');
+      await loadOrders(nextTokens.access);
+    } catch (error) {
+      setAuthMessage(error.message);
+    }
+  }
+
+  async function register(payload) {
+    setAuthMessage('Creating account...');
+    try {
+      await apiRequest('/auth/register/', { method: 'POST', body: payload });
+      await login({ email: payload.email, password: payload.password });
+    } catch (error) {
+      setAuthMessage(error.message);
+    }
+  }
+
+  function logout() {
+    clearStoredTokens();
+    setTokens(null);
+    setAuthUser(null);
+    setOrders([]);
+    setAuthMessage('');
+  }
+
+  async function createOrder() {
+    if (!tokens?.access) {
+      setCheckoutState({ status: 'error', message: 'Please login before checkout.' });
+      navigate('account');
+      return;
+    }
+
+    setCheckoutState({ status: 'loading', message: 'Creating your order...' });
+    try {
+      const order = await apiRequest('/orders/', {
+        method: 'POST',
+        token: tokens.access,
+        body: {
+          items: cart.map((item) => ({ product_id: item.id, quantity: item.qty })),
+        },
+      });
+      setCart([]);
+      setCheckoutState({
+        status: 'success',
+        message: `Order #${order.id} created. Payment gateway integration is the next phase.`,
+      });
+      await loadOrders(tokens.access);
+      navigate('account');
+    } catch (error) {
+      setCheckoutState({ status: 'error', message: error.message });
+    }
   }
 
   return (
     <div className="site-shell">
       <TopNotice />
       <Header
+        categories={categories}
         cartCount={cartCount}
         currentView={view}
         onNavigate={navigate}
@@ -240,11 +492,19 @@ export default function App() {
 
       <main>
         {view === 'home' && (
-          <HomePage onNavigate={navigate} onProductOpen={openProduct} onAddToCart={addToCart} />
+          <HomePage
+            categories={categories}
+            products={products}
+            catalogStatus={catalogStatus}
+            onNavigate={navigate}
+            onProductOpen={openProduct}
+            onAddToCart={addToCart}
+          />
         )}
         {view === 'products' && (
           <ProductsPage
             products={filteredProducts}
+            allProducts={products}
             filters={filters}
             onFilterChange={setFilters}
             onProductOpen={openProduct}
@@ -254,6 +514,7 @@ export default function App() {
         {view === 'product' && (
           <ProductDetail
             product={selectedProduct}
+            relatedProducts={relatedProducts}
             onAddToCart={addToCart}
             onProductOpen={openProduct}
           />
@@ -261,8 +522,25 @@ export default function App() {
         {view === 'cart' && (
           <CartPage cart={cart} total={cartTotal} onQty={updateQty} onCheckout={() => navigate('checkout')} />
         )}
-        {view === 'checkout' && <CheckoutPage cart={cart} total={cartTotal} />}
-        {view === 'account' && <AccountPage />}
+        {view === 'checkout' && (
+          <CheckoutPage
+            cart={cart}
+            total={cartTotal}
+            checkoutState={checkoutState}
+            isAuthenticated={Boolean(authUser)}
+            onSubmit={createOrder}
+          />
+        )}
+        {view === 'account' && (
+          <AccountPage
+            user={authUser}
+            orders={orders}
+            message={authMessage || checkoutState.message}
+            onLogin={login}
+            onRegister={register}
+            onLogout={logout}
+          />
+        )}
       </main>
 
       <Footer onNavigate={navigate} />
@@ -284,12 +562,13 @@ function TopNotice() {
     <div className="top-notice">
       <span>Gobeauty.bd</span>
       <span>Free delivery in Dhaka from Tk 2,500</span>
-      <span>bKash, Nagad, card, and Cash on Delivery</span>
+      <span>bKash, card, and Cash on Delivery</span>
     </div>
   );
 }
 
 function Header({
+  categories,
   cartCount,
   currentView,
   onNavigate,
@@ -318,9 +597,9 @@ function Header({
           <button type="button" onClick={() => onNavigate('products')}>Categories</button>
           <div className="mega-menu">
             {categories.map((category) => (
-              <div key={category.slug}>
+              <div key={category.slug || category.name}>
                 <strong>{category.name}</strong>
-                {category.children.map((child) => (
+                {(category.children.length ? category.children : ['All products']).map((child) => (
                   <button key={child} type="button" onClick={() => onNavigate('products')}>
                     {child}
                   </button>
@@ -361,7 +640,7 @@ function Header({
   );
 }
 
-function HomePage({ onNavigate, onProductOpen, onAddToCart }) {
+function HomePage({ categories, products, catalogStatus, onNavigate, onProductOpen, onAddToCart }) {
   return (
     <>
       <section className="hero">
@@ -386,11 +665,17 @@ function HomePage({ onNavigate, onProductOpen, onAddToCart }) {
         </div>
       </section>
 
+      {catalogStatus === 'fallback' && (
+        <div className="empty-state compact">
+          <p>Backend is offline, so the storefront is showing local demo products.</p>
+        </div>
+      )}
+
       <section className="category-strip">
         {categories.map((category) => (
-          <button key={category.slug} type="button" onClick={() => onNavigate('products')}>
+          <button key={category.slug || category.name} type="button" onClick={() => onNavigate('products')}>
             <span>{category.name}</span>
-            <small>{category.children.slice(0, 3).join(' / ')}</small>
+            <small>{category.children.slice(0, 3).join(' / ') || 'All products'}</small>
           </button>
         ))}
       </section>
@@ -419,15 +704,18 @@ function HomePage({ onNavigate, onProductOpen, onAddToCart }) {
           <span>Dhaka, Chattogram, Sylhet, and nationwide courier.</span>
         </div>
         <div>
-          <strong>Easy payments</strong>
-          <span>SSLCommerz-ready checkout for bKash, Nagad, Rocket, and cards.</span>
+          <strong>Secure checkout</strong>
+          <span>Backend-created orders now protect product price and stock rules.</span>
         </div>
       </section>
     </>
   );
 }
 
-function ProductsPage({ products, filters, onFilterChange, onProductOpen, onAddToCart }) {
+function ProductsPage({ products, allProducts, filters, onFilterChange, onProductOpen, onAddToCart }) {
+  const categoryOptions = ['All', ...new Set(allProducts.map((product) => product.category))];
+  const brandOptions = ['All', ...new Set(allProducts.map((product) => product.brand))];
+
   return (
     <section className="catalog-layout page-pad">
       <aside className="filters-panel">
@@ -438,13 +726,13 @@ function ProductsPage({ products, filters, onFilterChange, onProductOpen, onAddT
         <FilterSelect
           label="Category"
           value={filters.category}
-          options={['All', ...new Set(products.concat(windowProductsFallback()).map((p) => p.category))]}
+          options={categoryOptions}
           onChange={(category) => onFilterChange({ ...filters, category })}
         />
         <FilterSelect
           label="Brand"
           value={filters.brand}
-          options={['All', ...new Set(windowProductsFallback().map((p) => p.brand))]}
+          options={brandOptions}
           onChange={(brand) => onFilterChange({ ...filters, brand })}
         />
         <FilterSelect
@@ -487,10 +775,6 @@ function ProductsPage({ products, filters, onFilterChange, onProductOpen, onAddT
       </div>
     </section>
   );
-}
-
-function windowProductsFallback() {
-  return products;
 }
 
 function FilterSelect({ label, value, options, onChange }) {
@@ -552,12 +836,7 @@ function ProductCard({ product, onOpen, onAdd }) {
           <strong>{formatPrice(product.price)}</strong>
           <span>{formatPrice(product.compareAt)}</span>
         </div>
-        <button
-          className="add-button"
-          type="button"
-          disabled={product.stock === 0}
-          onClick={onAdd}
-        >
+        <button className="add-button" type="button" disabled={product.stock === 0} onClick={onAdd}>
           {product.stock === 0 ? 'Out of stock' : 'Add to cart'}
         </button>
       </div>
@@ -565,9 +844,7 @@ function ProductCard({ product, onOpen, onAdd }) {
   );
 }
 
-function ProductDetail({ product, onAddToCart, onProductOpen }) {
-  const related = products.filter((item) => item.id !== product.id).slice(0, 3);
-
+function ProductDetail({ product, relatedProducts, onAddToCart, onProductOpen }) {
   return (
     <section className="product-detail page-pad">
       <div className="gallery-panel">
@@ -623,7 +900,7 @@ function ProductDetail({ product, onAddToCart, onProductOpen }) {
 
       <div className="related-row">
         <SectionHeading label="You may also like" title="Related products" />
-        <ProductGrid products={related} onProductOpen={onProductOpen} onAddToCart={onAddToCart} />
+        <ProductGrid products={relatedProducts} onProductOpen={onProductOpen} onAddToCart={onAddToCart} />
       </div>
     </section>
   );
@@ -639,7 +916,7 @@ function CartPage({ cart, total, onQty, onCheckout }) {
   );
 }
 
-function CheckoutPage({ cart, total }) {
+function CheckoutPage({ cart, total, checkoutState, isAuthenticated, onSubmit }) {
   return (
     <section className="checkout page-pad">
       <div>
@@ -648,27 +925,30 @@ function CheckoutPage({ cart, total }) {
         <form className="checkout-form">
           <label>
             Full name
-            <input type="text" placeholder="Your name" />
+            <input type="text" placeholder="Your name" disabled={!isAuthenticated} />
           </label>
           <label>
             Phone number
-            <input type="tel" placeholder="+880" />
+            <input type="tel" placeholder="+880" disabled={!isAuthenticated} />
           </label>
           <label>
             Delivery address
-            <textarea placeholder="House, road, area, city" />
+            <textarea placeholder="House, road, area, city" disabled={!isAuthenticated} />
           </label>
           <label>
             Payment method
-            <select defaultValue="cod">
-              <option value="cod">Cash on Delivery</option>
-              <option value="bkash">bKash via SSLCommerz</option>
-              <option value="nagad">Nagad via SSLCommerz</option>
-              <option value="card">Card payment</option>
+            <select defaultValue="pending" disabled>
+              <option value="pending">Payment gateway next phase</option>
             </select>
           </label>
-          <button type="button" className="primary-button wide" disabled={!cart.length}>
-            Place order
+          {checkoutState.message && <p className="form-message">{checkoutState.message}</p>}
+          <button
+            type="button"
+            className="primary-button wide"
+            disabled={!cart.length || checkoutState.status === 'loading'}
+            onClick={onSubmit}
+          >
+            {checkoutState.status === 'loading' ? 'Creating order...' : 'Place order'}
           </button>
         </form>
       </div>
@@ -677,43 +957,121 @@ function CheckoutPage({ cart, total }) {
   );
 }
 
-function AccountPage() {
+function AccountPage({ user, orders, message, onLogin, onRegister, onLogout }) {
+  const [mode, setMode] = useState('login');
+  const [form, setForm] = useState({
+    email: '',
+    password: '',
+    first_name: '',
+    last_name: '',
+  });
+
+  function updateField(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function submitAccountForm(event) {
+    event.preventDefault();
+    if (mode === 'login') {
+      onLogin({ email: form.email, password: form.password });
+      return;
+    }
+    onRegister(form);
+  }
+
+  if (user) {
+    return (
+      <section className="account page-pad">
+        <div>
+          <p>Customer account</p>
+          <h1>{user.email}</h1>
+          {message && <p className="form-message">{message}</p>}
+          <button type="button" className="secondary-button wide" onClick={onLogout}>
+            Logout
+          </button>
+        </div>
+        <OrderHistory orders={orders} />
+      </section>
+    );
+  }
+
   return (
     <section className="account page-pad">
       <div>
         <p>Customer account</p>
-        <h1>Login or create an account</h1>
-        <form className="checkout-form">
+        <h1>{mode === 'login' ? 'Login to your account' : 'Create an account'}</h1>
+        <form className="checkout-form" onSubmit={submitAccountForm}>
+          {mode === 'register' && (
+            <>
+              <label>
+                First name
+                <input value={form.first_name} onChange={(event) => updateField('first_name', event.target.value)} />
+              </label>
+              <label>
+                Last name
+                <input value={form.last_name} onChange={(event) => updateField('last_name', event.target.value)} />
+              </label>
+            </>
+          )}
           <label>
-            Email or phone
-            <input type="text" placeholder="name@email.com" />
+            Email
+            <input
+              type="email"
+              value={form.email}
+              placeholder="name@email.com"
+              onChange={(event) => updateField('email', event.target.value)}
+              required
+            />
           </label>
           <label>
             Password
-            <input type="password" placeholder="Password" />
+            <input
+              type="password"
+              value={form.password}
+              placeholder="Password"
+              onChange={(event) => updateField('password', event.target.value)}
+              required
+            />
           </label>
-          <button type="button" className="primary-button wide">
-            Login
+          {message && <p className="form-message">{message}</p>}
+          <button type="submit" className="primary-button wide">
+            {mode === 'login' ? 'Login' : 'Create account'}
           </button>
-          <button type="button" className="secondary-button wide">
-            Create account
+          <button
+            type="button"
+            className="secondary-button wide"
+            onClick={() => setMode(mode === 'login' ? 'register' : 'login')}
+          >
+            {mode === 'login' ? 'Create account' : 'Back to login'}
           </button>
         </form>
       </div>
-      <div className="order-history">
-        <h2>Recent orders</h2>
-        <article>
-          <strong>#GBD-1024</strong>
-          <span>Processing</span>
-          <p>2 items - estimated delivery tomorrow in Dhaka.</p>
-        </article>
-        <article>
-          <strong>#GBD-1018</strong>
-          <span>Delivered</span>
-          <p>Glow Guard SPF 50 and Velvet Matte Lip Tint.</p>
-        </article>
-      </div>
+      <OrderHistory orders={[]} />
     </section>
+  );
+}
+
+function OrderHistory({ orders }) {
+  return (
+    <div className="order-history">
+      <h2>Recent orders</h2>
+      {!orders.length && (
+        <article>
+          <strong>No orders yet</strong>
+          <span>Ready</span>
+          <p>Your backend orders will appear here after checkout.</p>
+        </article>
+      )}
+      {orders.map((order) => (
+        <article key={order.id}>
+          <strong>#{order.id}</strong>
+          <span>{order.status}</span>
+          <p>
+            {order.items?.length || 0} items - total {formatPrice(order.total_amount)}
+          </p>
+        </article>
+      ))}
+    </div>
   );
 }
 
