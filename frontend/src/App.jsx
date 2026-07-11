@@ -570,6 +570,7 @@ export default function App() {
             onLogin={login}
             onRegister={register}
             onLogout={logout}
+            onNavigate={navigate}
           />
         )}
       </main>
@@ -622,6 +623,11 @@ function Header({
           <small>Skincare, makeup, hair & body</small>
         </span>
       </div>
+
+      <label className="header-search">
+        <span />
+        <input type="search" placeholder="Search products" onFocus={() => onNavigate('products')} />
+      </label>
 
       <nav className={`main-nav ${mobileMenuOpen ? 'is-open' : ''}`}>
         <div className="mega-trigger">
@@ -1050,7 +1056,37 @@ function PaymentPlaceholder() {
   );
 }
 
-function AccountPage({ user, orders, authStatus, ordersStatus, message, onLogin, onRegister, onLogout }) {
+function getCustomerName(user) {
+  const fullName = [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim();
+  return user?.full_name || fullName || user?.email?.split('@')[0] || 'Beauty shopper';
+}
+
+function getInitials(user) {
+  return getCustomerName(user)
+    .split(' ')
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+function getOrderStats(orders) {
+  const totalSpent = orders.reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
+  const activeOrders = orders.filter((order) => !['delivered', 'cancelled'].includes(order.status)).length;
+  return { totalSpent, activeOrders };
+}
+
+function AccountPage({
+  user,
+  orders,
+  authStatus,
+  ordersStatus,
+  message,
+  onLogin,
+  onRegister,
+  onLogout,
+  onNavigate,
+}) {
   const [mode, setMode] = useState('login');
   const [form, setForm] = useState({
     email: '',
@@ -1073,20 +1109,75 @@ function AccountPage({ user, orders, authStatus, ordersStatus, message, onLogin,
   }
 
   if (user) {
+    const customerName = getCustomerName(user);
+    const orderStats = getOrderStats(orders);
+
     return (
-      <section className="account page-pad">
-        <div>
-          <p>Customer account</p>
-          <h1>{user.email}</h1>
-          {message && <p className="form-message">{message}</p>}
-          {authStatus === 'loading' && (
-            <StatusBanner title="Checking session" message="Refreshing your account details." />
-          )}
-          <button type="button" className="secondary-button wide" onClick={onLogout}>
-            Logout
-          </button>
+      <section className="account-dashboard page-pad">
+        <div className="account-hero">
+          <div className="customer-card">
+            <span className="customer-avatar">{getInitials(user)}</span>
+            <div>
+              <p>My account</p>
+              <h1>{customerName}</h1>
+              <span>{user.email}</span>
+            </div>
+          </div>
+          <div className="account-actions">
+            <button type="button" className="primary-button" onClick={() => onNavigate('products')}>
+              Continue shopping
+            </button>
+            <button type="button" className="secondary-button" onClick={() => onNavigate('checkout')}>
+              Checkout
+            </button>
+            <button type="button" className="secondary-button" onClick={onLogout}>
+              Logout
+            </button>
+          </div>
         </div>
-        <OrderHistory orders={orders} ordersStatus={ordersStatus} />
+
+        {message && <p className="form-message dashboard-message">{message}</p>}
+        {authStatus === 'loading' && (
+          <StatusBanner title="Checking session" message="Refreshing your account details." />
+        )}
+
+        <div className="dashboard-stats">
+          <StatCard label="Orders" value={orders.length} note="Created from backend checkout" />
+          <StatCard label="Active" value={orderStats.activeOrders} note="Processing or pending orders" />
+          <StatCard label="Spent" value={formatPrice(orderStats.totalSpent)} note="Total successful order value" />
+          <StatCard label="Role" value={user.role || 'customer'} note="Account permission level" />
+        </div>
+
+        <div className="dashboard-grid">
+          <div className="dashboard-panel profile-panel">
+            <SectionHeading label="Profile" title="Customer details" />
+            <dl className="profile-list">
+              <div>
+                <dt>Name</dt>
+                <dd>{customerName}</dd>
+              </div>
+              <div>
+                <dt>Email</dt>
+                <dd>{user.email}</dd>
+              </div>
+              <div>
+                <dt>Customer type</dt>
+                <dd>{user.role || 'customer'}</dd>
+              </div>
+            </dl>
+          </div>
+
+          <div className="dashboard-panel delivery-panel">
+            <SectionHeading label="Delivery" title="Saved preferences" />
+            <div className="preference-list">
+              <span>Dhaka courier-ready checkout</span>
+              <span>Free delivery from Tk 2,500</span>
+              <span>Payment strategy integration next phase</span>
+            </div>
+          </div>
+
+          <OrderHistory orders={orders} ordersStatus={ordersStatus} />
+        </div>
       </section>
     );
   }
@@ -1149,7 +1240,7 @@ function AccountPage({ user, orders, authStatus, ordersStatus, message, onLogin,
 
 function OrderHistory({ orders, ordersStatus }) {
   return (
-    <div className="order-history">
+    <div className="order-history dashboard-panel">
       <h2>Recent orders</h2>
       {ordersStatus === 'loading' && (
         <article>
@@ -1174,7 +1265,7 @@ function OrderHistory({ orders, ordersStatus }) {
       )}
       {orders.map((order) => (
         <article key={order.id}>
-          <strong>#{order.id}</strong>
+          <strong>Order #{order.id}</strong>
           <span>{order.status}</span>
           <p>
             {order.items?.length || 0} items - total {formatPrice(order.total_amount)}
@@ -1182,6 +1273,16 @@ function OrderHistory({ orders, ordersStatus }) {
         </article>
       ))}
     </div>
+  );
+}
+
+function StatCard({ label, value, note }) {
+  return (
+    <article className="stat-card">
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <p>{note}</p>
+    </article>
   );
 }
 
@@ -1282,23 +1383,46 @@ function SectionHeading({ label, title, action, onAction }) {
 }
 
 function Footer({ onNavigate }) {
+  const paymentMethods = ['Visa', 'Mastercard', 'AmEx', 'bKash', 'Nagad', 'Rocket', 'COD'];
+
   return (
     <footer className="site-footer">
-      <div>
+      <div className="footer-brand">
+        <span className="footer-mark">GB</span>
         <strong>Go Beauty Bangladesh</strong>
-        <p>Gobeauty.bd brings authentic skincare, makeup, and personal care products to beauty shoppers across Bangladesh.</p>
+        <p>Authentic skincare, makeup, and personal care products for beauty shoppers across Bangladesh.</p>
       </div>
-      <div>
-        <span>Shop</span>
+
+      <div className="footer-links">
+        <span>Pages</span>
+        <button type="button" onClick={() => onNavigate('home')}>Home</button>
         <button type="button" onClick={() => onNavigate('products')}>All products</button>
-        <button type="button" onClick={() => onNavigate('products')}>Skincare</button>
-        <button type="button" onClick={() => onNavigate('products')}>Makeup</button>
+        <button type="button" onClick={() => onNavigate('account')}>My account</button>
+        <button type="button" onClick={() => onNavigate('cart')}>Cart</button>
       </div>
-      <div>
-        <span>Support</span>
+
+      <div className="footer-links">
+        <span>Help</span>
         <button type="button" onClick={() => onNavigate('account')}>Track order</button>
         <button type="button" onClick={() => onNavigate('checkout')}>Delivery</button>
         <button type="button" onClick={() => onNavigate('checkout')}>Payments</button>
+        <button type="button" onClick={() => onNavigate('checkout')}>Return policy</button>
+      </div>
+
+      <form className="newsletter-form">
+        <span>Subscribe to newsletter</span>
+        <input type="email" placeholder="Enter your email" />
+        <button type="button" className="primary-button">Subscribe</button>
+      </form>
+
+      <div className="payment-strip">
+        <span>Pay with</span>
+        <div>
+          {paymentMethods.map((method) => (
+            <strong key={method}>{method}</strong>
+          ))}
+        </div>
+        <small>Verified by SSLCommerz-ready checkout</small>
       </div>
     </footer>
   );
