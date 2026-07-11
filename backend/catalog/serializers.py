@@ -22,6 +22,7 @@ class CategorySerializer(serializers.ModelSerializer):
 
 class ProductListSerializer(serializers.ModelSerializer):
     category = CategorySerializer(read_only=True)
+    image_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -30,11 +31,22 @@ class ProductListSerializer(serializers.ModelSerializer):
             'category',
             'name',
             'sku',
+            'image_url',
             'price',
             'stock',
             'status',
         )
         read_only_fields = fields
+
+    def get_image_url(self, product):
+        if not product.image:
+            return ''
+
+        request = self.context.get('request')
+        image_url = product.image.url
+        if request:
+            return request.build_absolute_uri(image_url)
+        return image_url
 
 
 class ProductDetailSerializer(ProductListSerializer):
@@ -55,6 +67,7 @@ class ProductAdminSerializer(serializers.ModelSerializer):
             'name',
             'sku',
             'description',
+            'image',
             'price',
             'stock',
             'status',

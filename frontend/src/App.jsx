@@ -255,6 +255,8 @@ function enrichProduct(product) {
   const price = Number(product.price || 0);
   const visual = productVisuals[product.sku] || {};
   const image =
+    product.image_url ||
+    product.image ||
     visual.image ||
     'https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=900&q=80';
 
@@ -271,7 +273,7 @@ function enrichProduct(product) {
     reviews: product.reviews || visual.reviews || 24,
     badge: product.stock > 0 ? visual.badge || 'Available' : 'Out of stock',
     image,
-    gallery: visual.gallery || [image],
+    gallery: product.gallery || visual.gallery || [image],
     description: product.description || 'Authentic beauty product available from Go Beauty Bangladesh.',
   };
 }
@@ -411,6 +413,11 @@ export default function App() {
     navigate('products');
   }
 
+  function browseCategory(category = 'All') {
+    setFilters({ ...filtersInitial, category });
+    navigate('products');
+  }
+
   async function openProduct(product) {
     const fallbackRelated = products.filter((item) => item.id !== product.id).slice(0, 3);
     setSelectedProduct(product);
@@ -532,6 +539,7 @@ export default function App() {
         onNavigate={navigate}
         onCartOpen={() => setCartOpen(true)}
         onSearch={searchProducts}
+        onCategoryBrowse={browseCategory}
         mobileMenuOpen={mobileMenuOpen}
         onMobileToggle={() => setMobileMenuOpen((open) => !open)}
       />
@@ -543,6 +551,7 @@ export default function App() {
             products={products}
             catalogStatus={catalogStatus}
             onNavigate={navigate}
+            onCategoryBrowse={browseCategory}
             onProductOpen={openProduct}
             onAddToCart={addToCart}
           />
@@ -625,6 +634,7 @@ function Header({
   onNavigate,
   onCartOpen,
   onSearch,
+  onCategoryBrowse,
   mobileMenuOpen,
   onMobileToggle,
 }) {
@@ -654,13 +664,17 @@ function Header({
 
       <nav className={`main-nav ${mobileMenuOpen ? 'is-open' : ''}`}>
         <div className="mega-trigger">
-          <button type="button" onClick={() => onNavigate('products')}>Categories</button>
+          <button type="button" onClick={() => onCategoryBrowse('All')}>Categories</button>
           <div className="mega-menu">
             {categories.map((category) => (
               <div key={category.slug || category.name}>
                 <strong>{category.name}</strong>
                 {(category.children.length ? category.children : ['All products']).map((child) => (
-                  <button key={child} type="button" onClick={() => onNavigate('products')}>
+                  <button
+                    key={child}
+                    type="button"
+                    onClick={() => onCategoryBrowse(child === 'All products' ? 'All' : child)}
+                  >
                     {child}
                   </button>
                 ))}
@@ -718,7 +732,15 @@ function Header({
   );
 }
 
-function HomePage({ categories, products, catalogStatus, onNavigate, onProductOpen, onAddToCart }) {
+function HomePage({
+  categories,
+  products,
+  catalogStatus,
+  onNavigate,
+  onCategoryBrowse,
+  onProductOpen,
+  onAddToCart,
+}) {
   return (
     <>
       <section className="hero">
@@ -757,7 +779,11 @@ function HomePage({ categories, products, catalogStatus, onNavigate, onProductOp
 
       <section className="category-strip">
         {categories.map((category) => (
-          <button key={category.slug || category.name} type="button" onClick={() => onNavigate('products')}>
+          <button
+            key={category.slug || category.name}
+            type="button"
+            onClick={() => onCategoryBrowse(category.children[0] || 'All')}
+          >
             <span>{category.name}</span>
             <small>{category.children.slice(0, 3).join(' / ') || 'All products'}</small>
           </button>

@@ -32,6 +32,12 @@ def create_product(category, **overrides):
     return Product.objects.create(category=category, **data)
 
 
+def response_items(response):
+    if isinstance(response.data, list):
+        return response.data
+    return response.data['results']
+
+
 class CategoryModelTests(TestCase):
     def test_category_can_have_parent(self):
         parent = create_category()
@@ -66,10 +72,11 @@ class CatalogApiTests(APITestCase):
         create_category('Hidden', 'hidden', is_active=False)
 
         response = self.client.get(reverse('catalog:category-list'))
+        items = response_items(response)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['slug'], 'skincare')
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]['slug'], 'skincare')
 
     def test_public_product_list_only_returns_active_products(self):
         create_product(
@@ -80,10 +87,12 @@ class CatalogApiTests(APITestCase):
         )
 
         response = self.client.get(reverse('catalog:product-list'))
+        items = response_items(response)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['sku'], 'GBD-SUN-001')
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]['sku'], 'GBD-SUN-001')
+        self.assertIn('image_url', items[0])
 
     def test_admin_product_create_requires_admin_role(self):
         response = self.client.post(

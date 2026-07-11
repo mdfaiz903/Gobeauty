@@ -13,7 +13,12 @@ class CategoryAdmin(admin.ModelAdmin):
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ('name', 'sku', 'category', 'price', 'stock', 'status', 'updated_at')
+    list_display = ('name', 'sku', 'category', 'price', 'stock', 'status', 'has_image', 'updated_at')
     list_filter = ('status', 'category')
     search_fields = ('name', 'sku', 'description')
     autocomplete_fields = ('category',)
+
+    def has_image(self, product):
+        return bool(product.image)
+
+    has_image.boolean = True
