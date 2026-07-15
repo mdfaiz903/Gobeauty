@@ -464,3 +464,113 @@ class StripeWebhookApiTests(APITestCase):
             hashlib.sha256,
         ).hexdigest()
         return f't={timestamp},v1={signature}'
+
+
+class BkashCallbackApiTests(APITestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            email='bkash-callback@example.com',
+            password='StrongPass123!',
+        )
+        self.other_user = get_user_model().objects.create_user(
+            email='bkash-other@example.com',
+            password='StrongPass123!',
+        )
+        self.staff_user = get_user_model().objects.create_user(
+            email='bkash-staff@example.com',
+            password='StrongPass123!',
+            is_staff=True,
+        )
+        self.order = Order.objects.create(
+            user=self.user,
+            total_amount=Decimal('1590.00'),
+        )
+        self.payment = Payment.objects.create(
+            order=self.order,
+            provider=Payment.Provider.BKASH,
+            amount=self.order.total_amount,
+            transaction_id='bkash_sandbox_callback_123',
+            status=Payment.Status.PENDING,
+        )
+        self.execute_url = reverse('payments:bkash-execute')
+        self.query_url = reverse('payments:bkash-query')
+
+    def test_bkash_execute_marks_payment_succeeded(self):
+        response = self.client.post(
+            self.execute_url,
+            {'paymentID': self.payment.transaction_id},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.status, Payment.Status.SUCCEEDED)
+        self.assertTrue(self.payment.raw_response['simulated'])
+
+    def test_bkash_execute_accepts_get_callback(self):
+        response = self.client.get(
+            self.execute_url,
+            {'paymentID': self.payment.transaction_id},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.status, Payment.Status.SUCCEEDED)
+
+    def test_bkash_execute_rejects_unknown_payment(self):
+        response = self.client.post(
+            self.execute_url,
+            {'paymentID': 'missing_payment'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_bkash_query_returns_owner_payment_status(self):
+        self.client.force_authenticate(self.user)
+
+        response = self.client.post(
+            self.query_url,
+            {'transaction_id': self.payment.transaction_id},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['payment']['status'], Payment.Status.PENDING)
+
+    def test_bkash_query_requires_authentication(self):
+        response = self.client.post(
+            self.query_url,
+            {'transaction_id': self.payment.transaction_id},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_bkash_query_blocks_other_users_payment(self):
+        self.client.force_authenticate(self.other_user)
+
+        response = self.client.post(
+            self.query_url,
+            {'transaction_id': self.payment.transaction_id},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_bkash_query_allows_staff_user(self):
+        self.client.force_authenticate(self.staff_user)
+
+        response = self.client.get(
+            self.query_url,
+            {'paymentID': self.payment.transaction_id},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_bkash_query_requires_transaction_id(self):
+        self.client.force_authenticate(self.user)
+
+        response = self.client.post(self.query_url, {}, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)

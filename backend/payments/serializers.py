@@ -41,3 +41,20 @@ class PaymentSerializer(serializers.ModelSerializer):
             'updated_at',
         )
         read_only_fields = fields
+
+
+class BkashTransactionSerializer(serializers.Serializer):
+    transaction_id = serializers.CharField(required=False, allow_blank=True)
+    payment_id = serializers.CharField(required=False, allow_blank=True)
+    paymentID = serializers.CharField(required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        transaction_id = (
+            attrs.get('transaction_id')
+            or attrs.get('payment_id')
+            or attrs.get('paymentID')
+        )
+        if not transaction_id:
+            raise serializers.ValidationError('transaction_id or paymentID is required.')
+        attrs['transaction_id'] = transaction_id
+        return attrs

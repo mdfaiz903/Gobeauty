@@ -165,3 +165,35 @@ class StripeWebhookService:
         if event_type in canceled_events:
             return Payment.Status.CANCELED
         return Payment.Status.PENDING
+
+
+class BkashPaymentService:
+    @transaction.atomic
+    def execute_payment(self, transaction_id):
+        result = PaymentProviderFactory.create(Payment.Provider.BKASH).execute_payment(
+            transaction_id,
+        )
+        return self._update_payment(result)
+
+    @transaction.atomic
+    def query_payment(self, transaction_id):
+        result = PaymentProviderFactory.create(Payment.Provider.BKASH).query_payment(
+            transaction_id,
+        )
+        return self._update_payment(result)
+
+    def _update_payment(self, result):
+        payment = self._get_payment(result.transaction_id)
+        payment.status = result.status
+        payment.raw_response = result.raw_response
+        payment.save(update_fields=['status', 'raw_response', 'updated_at'])
+        return payment
+
+    def _get_payment(self, transaction_id):
+        try:
+            return Payment.objects.get(
+                provider=Payment.Provider.BKASH,
+                transaction_id=transaction_id,
+            )
+        except Payment.DoesNotExist as exc:
+            raise ValueError('bKash payment was not found.') from exc
