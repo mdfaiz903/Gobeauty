@@ -1,7 +1,11 @@
+import hashlib
+import hmac
+import json
+import time
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -358,3 +362,105 @@ class PaymentInitiationApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class StripeWebhookApiTests(APITestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            email='webhook-payer@example.com',
+            password='StrongPass123!',
+        )
+        self.order = Order.objects.create(
+            user=self.user,
+            total_amount=Decimal('2450.00'),
+        )
+        self.payment = Payment.objects.create(
+            order=self.order,
+            provider=Payment.Provider.STRIPE,
+            amount=self.order.total_amount,
+            transaction_id='cs_test_webhook_123',
+            status=Payment.Status.PENDING,
+        )
+        self.url = reverse('payments:stripe-webhook')
+
+    @override_settings(STRIPE_WEBHOOK_SECRET='')
+    def test_stripe_webhook_marks_payment_succeeded(self):
+        response = self.client.post(
+            self.url,
+            data=self._event_payload('checkout.session.completed'),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.status, Payment.Status.SUCCEEDED)
+        self.assertEqual(self.payment.raw_response['type'], 'checkout.session.completed')
+
+    @override_settings(STRIPE_WEBHOOK_SECRET='')
+    def test_stripe_webhook_marks_payment_failed(self):
+        response = self.client.post(
+            self.url,
+            data=self._event_payload('payment_intent.payment_failed'),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.status, Payment.Status.FAILED)
+
+    def test_stripe_webhook_rejects_invalid_payload(self):
+        response = self.client.post(
+            self.url,
+            data='not-json',
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    @override_settings(STRIPE_WEBHOOK_SECRET='whsec_test_secret')
+    def test_stripe_webhook_accepts_valid_signature(self):
+        payload = self._event_payload('checkout.session.completed')
+        signature = self._build_stripe_signature(payload)
+
+        response = self.client.post(
+            self.url,
+            data=payload,
+            content_type='application/json',
+            HTTP_STRIPE_SIGNATURE=signature,
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    @override_settings(STRIPE_WEBHOOK_SECRET='whsec_test_secret')
+    def test_stripe_webhook_rejects_invalid_signature(self):
+        response = self.client.post(
+            self.url,
+            data=self._event_payload('checkout.session.completed'),
+            content_type='application/json',
+            HTTP_STRIPE_SIGNATURE='t=1,v1=bad',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def _event_payload(self, event_type):
+        return json.dumps(
+            {
+                'id': 'evt_test_123',
+                'type': event_type,
+                'data': {
+                    'object': {
+                        'id': self.payment.transaction_id,
+                    },
+                },
+            },
+        )
+
+    def _build_stripe_signature(self, payload):
+        timestamp = int(time.time())
+        signed_payload = f'{timestamp}.{payload}'.encode('utf-8')
+        signature = hmac.new(
+            b'whsec_test_secret',
+            signed_payload,
+            hashlib.sha256,
+        ).hexdigest()
+        return f't={timestamp},v1={signature}'

@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from payments.serializers import PaymentInitiationSerializer, PaymentSerializer
-from payments.services import PaymentInitiationService
+from payments.services import PaymentInitiationService, StripeWebhookService
 
 
 class PaymentInitiationView(APIView):
@@ -29,4 +29,29 @@ class PaymentInitiationView(APIView):
                 'redirect_url': result.redirect_url,
             },
             status=status.HTTP_201_CREATED,
+        )
+
+
+class StripeWebhookView(APIView):
+    authentication_classes = []
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        try:
+            payment = StripeWebhookService().handle_event(
+                payload=request.body,
+                signature=request.headers.get('Stripe-Signature', ''),
+            )
+        except ValueError as exc:
+            return Response(
+                {'detail': str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(
+            {
+                'payment': PaymentSerializer(payment).data,
+                'received': True,
+            },
+            status=status.HTTP_200_OK,
         )
