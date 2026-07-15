@@ -9,6 +9,7 @@ from payments.strategies import (
     PaymentProviderStrategy,
     PaymentRequest,
     PaymentResult,
+    StripePaymentStrategy,
 )
 
 
@@ -78,3 +79,62 @@ class PaymentProviderStrategyTests(TestCase):
 
         self.assertEqual(result.status, Payment.Status.PENDING)
         self.assertTrue(result.raw_response['queried'])
+
+
+class FakeStripeClient:
+    def create_checkout_session(self, payment_request):
+        return {
+            'id': f'cs_test_{payment_request.order.id}',
+            'url': 'https://checkout.stripe.test/session',
+            'amount': str(payment_request.amount),
+        }
+
+
+class StripePaymentStrategyTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            email='stripe-payer@example.com',
+            password='StrongPass123!',
+        )
+        self.order = Order.objects.create(
+            user=self.user,
+            total_amount=Decimal('1890.00'),
+        )
+        self.payment_request = PaymentRequest(
+            order=self.order,
+            amount=self.order.total_amount,
+            success_url='https://frontend.example.test/success',
+            cancel_url='https://frontend.example.test/cancel',
+            metadata={'source': 'unit-test'},
+        )
+
+    def test_stripe_strategy_initiates_test_payment(self):
+        result = StripePaymentStrategy().initiate_payment(self.payment_request)
+
+        self.assertEqual(result.provider, Payment.Provider.STRIPE)
+        self.assertEqual(result.status, Payment.Status.PENDING)
+        self.assertEqual(result.transaction_id, f'stripe_test_order_{self.order.id}')
+        self.assertIn(result.transaction_id, result.redirect_url)
+        self.assertEqual(result.raw_response['amount'], '1890.00')
+        self.assertTrue(result.raw_response['simulated'])
+
+    def test_stripe_strategy_uses_injected_client(self):
+        result = StripePaymentStrategy(client=FakeStripeClient()).initiate_payment(
+            self.payment_request,
+        )
+
+        self.assertEqual(result.transaction_id, f'cs_test_{self.order.id}')
+        self.assertEqual(result.redirect_url, 'https://checkout.stripe.test/session')
+        self.assertEqual(result.raw_response['amount'], '1890.00')
+
+    def test_stripe_strategy_execute_returns_success_result(self):
+        result = StripePaymentStrategy().execute_payment('stripe_test_order_1')
+
+        self.assertEqual(result.status, Payment.Status.SUCCEEDED)
+        self.assertTrue(result.raw_response['simulated'])
+
+    def test_stripe_strategy_query_returns_pending_result(self):
+        result = StripePaymentStrategy().query_payment('stripe_test_order_1')
+
+        self.assertEqual(result.status, Payment.Status.PENDING)
+        self.assertTrue(result.raw_response['simulated'])

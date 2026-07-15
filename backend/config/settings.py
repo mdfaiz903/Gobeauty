@@ -200,6 +200,14 @@ SIMPLE_JWT = {
     ),
 }
 
+STRIPE_MODE = get_env('STRIPE_MODE', 'test')
+STRIPE_SECRET_KEY = get_env('STRIPE_SECRET_KEY', '')
+STRIPE_WEBHOOK_SECRET = get_env('STRIPE_WEBHOOK_SECRET', '')
+STRIPE_CHECKOUT_BASE_URL = get_env(
+    'STRIPE_CHECKOUT_BASE_URL',
+    'https://checkout.stripe.com/c/pay',
+)
+
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Go Beauty Ordering & Payment API',
     'DESCRIPTION': 'Backend API for products, orders, payments, and recommendations.',
