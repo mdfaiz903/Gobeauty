@@ -17,6 +17,8 @@ from payments.factories import (
     UnsupportedPaymentProviderError,
 )
 from payments.models import Payment
+from payments.serializers import BkashTransactionSerializer
+from payments.services import PaymentFinalizationService
 from payments.strategies import (
     BkashPaymentStrategy,
     PaymentProviderStrategy,
@@ -249,6 +251,31 @@ class PaymentProviderFactoryTests(TestCase):
             PaymentProviderFactory.create('paypal')
 
 
+class BkashTransactionSerializerTests(TestCase):
+    def test_serializer_accepts_transaction_id(self):
+        serializer = BkashTransactionSerializer(data={'transaction_id': 'trx_123'})
+
+        self.assertTrue(serializer.is_valid())
+        self.assertEqual(serializer.validated_data['transaction_id'], 'trx_123')
+
+    def test_serializer_accepts_payment_id_alias(self):
+        serializer = BkashTransactionSerializer(data={'payment_id': 'pay_123'})
+
+        self.assertTrue(serializer.is_valid())
+        self.assertEqual(serializer.validated_data['transaction_id'], 'pay_123')
+
+    def test_serializer_accepts_bkash_payment_id_alias(self):
+        serializer = BkashTransactionSerializer(data={'paymentID': 'bkash_123'})
+
+        self.assertTrue(serializer.is_valid())
+        self.assertEqual(serializer.validated_data['transaction_id'], 'bkash_123')
+
+    def test_serializer_requires_any_transaction_identifier(self):
+        serializer = BkashTransactionSerializer(data={})
+
+        self.assertFalse(serializer.is_valid())
+
+
 class PaymentInitiationApiTests(APITestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(
@@ -418,6 +445,38 @@ class StripeWebhookApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    @override_settings(STRIPE_WEBHOOK_SECRET='')
+    def test_stripe_webhook_rejects_missing_transaction_id(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps(
+                {
+                    'id': 'evt_missing_transaction',
+                    'type': 'checkout.session.completed',
+                    'data': {'object': {}},
+                },
+            ),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    @override_settings(STRIPE_WEBHOOK_SECRET='')
+    def test_stripe_webhook_rejects_unknown_payment(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps(
+                {
+                    'id': 'evt_unknown_payment',
+                    'type': 'checkout.session.completed',
+                    'data': {'object': {'id': 'cs_unknown'}},
+                },
+            ),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
     @override_settings(STRIPE_WEBHOOK_SECRET='whsec_test_secret')
     def test_stripe_webhook_accepts_valid_signature(self):
         payload = self._event_payload('checkout.session.completed')
@@ -443,6 +502,20 @@ class StripeWebhookApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    @override_settings(STRIPE_WEBHOOK_SECRET='whsec_test_secret')
+    def test_stripe_webhook_rejects_expired_signature(self):
+        payload = self._event_payload('checkout.session.completed')
+        signature = self._build_stripe_signature(payload, timestamp=int(time.time()) - 600)
+
+        response = self.client.post(
+            self.url,
+            data=payload,
+            content_type='application/json',
+            HTTP_STRIPE_SIGNATURE=signature,
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
     def _event_payload(self, event_type):
         return json.dumps(
             {
@@ -456,8 +529,8 @@ class StripeWebhookApiTests(APITestCase):
             },
         )
 
-    def _build_stripe_signature(self, payload):
-        timestamp = int(time.time())
+    def _build_stripe_signature(self, payload, timestamp=None):
+        timestamp = timestamp or int(time.time())
         signed_payload = f'{timestamp}.{payload}'.encode('utf-8')
         signature = hmac.new(
             b'whsec_test_secret',
@@ -677,6 +750,21 @@ class PaymentStockFinalizationTests(APITestCase):
         self.assertEqual(self.product.stock, 1)
         self.assertEqual(self.order.status, Order.Status.PENDING)
         self.assertEqual(payment.status, Payment.Status.PENDING)
+
+    def test_failed_payment_does_not_reduce_stock_or_mark_order_paid(self):
+        payment = self._create_payment(Payment.Provider.STRIPE, 'cs_stock_failed')
+
+        updated_payment = PaymentFinalizationService().update_payment_status(
+            payment=payment,
+            next_status=Payment.Status.FAILED,
+            raw_response={'type': 'payment_intent.payment_failed'},
+        )
+
+        self.product.refresh_from_db()
+        self.order.refresh_from_db()
+        self.assertEqual(updated_payment.status, Payment.Status.FAILED)
+        self.assertEqual(self.product.stock, 5)
+        self.assertEqual(self.order.status, Order.Status.PENDING)
 
     def _create_payment(self, provider, transaction_id):
         return Payment.objects.create(

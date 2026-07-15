@@ -59,4 +59,4 @@ class ProductRecommendationApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['results'][0]['id'], related.id)
+        self.assertEqual(response.data[0]['id'], related.id)
