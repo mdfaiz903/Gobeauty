@@ -208,6 +208,16 @@ STRIPE_CHECKOUT_BASE_URL = get_env(
     'https://checkout.stripe.com/c/pay',
 )
 
+BKASH_MODE = get_env('BKASH_MODE', 'sandbox')
+BKASH_APP_KEY = get_env('BKASH_APP_KEY', '')
+BKASH_APP_SECRET = get_env('BKASH_APP_SECRET', '')
+BKASH_USERNAME = get_env('BKASH_USERNAME', '')
+BKASH_PASSWORD = get_env('BKASH_PASSWORD', '')
+BKASH_BASE_URL = get_env(
+    'BKASH_BASE_URL',
+    'https://tokenized.sandbox.bka.sh/v1.2.0-beta/tokenized/checkout',
+)
+
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Go Beauty Ordering & Payment API',
     'DESCRIPTION': 'Backend API for products, orders, payments, and recommendations.',

@@ -6,6 +6,7 @@ from django.test import TestCase
 from orders.models import Order
 from payments.models import Payment
 from payments.strategies import (
+    BkashPaymentStrategy,
     PaymentProviderStrategy,
     PaymentRequest,
     PaymentResult,
@@ -138,3 +139,78 @@ class StripePaymentStrategyTests(TestCase):
 
         self.assertEqual(result.status, Payment.Status.PENDING)
         self.assertTrue(result.raw_response['simulated'])
+
+
+class FakeBkashClient:
+    def create_payment(self, payment_request):
+        return {
+            'paymentID': f'bkash_{payment_request.order.id}',
+            'bkashURL': 'https://bkash.test/checkout',
+            'amount': str(payment_request.amount),
+        }
+
+    def execute_payment(self, transaction_id):
+        return {
+            'paymentID': transaction_id,
+            'status': Payment.Status.SUCCEEDED,
+        }
+
+    def query_payment(self, transaction_id):
+        return {
+            'paymentID': transaction_id,
+            'status': Payment.Status.PENDING,
+        }
+
+
+class BkashPaymentStrategyTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            email='bkash-payer@example.com',
+            password='StrongPass123!',
+        )
+        self.order = Order.objects.create(
+            user=self.user,
+            total_amount=Decimal('980.00'),
+        )
+        self.payment_request = PaymentRequest(
+            order=self.order,
+            amount=self.order.total_amount,
+            metadata={'source': 'unit-test'},
+        )
+
+    def test_bkash_strategy_initiates_sandbox_payment(self):
+        result = BkashPaymentStrategy().initiate_payment(self.payment_request)
+
+        self.assertEqual(result.provider, Payment.Provider.BKASH)
+        self.assertEqual(result.status, Payment.Status.PENDING)
+        self.assertEqual(result.transaction_id, f'bkash_sandbox_order_{self.order.id}')
+        self.assertIn(result.transaction_id, result.redirect_url)
+        self.assertEqual(result.raw_response['amount'], '980.00')
+        self.assertTrue(result.raw_response['simulated'])
+
+    def test_bkash_strategy_uses_injected_client(self):
+        result = BkashPaymentStrategy(client=FakeBkashClient()).initiate_payment(
+            self.payment_request,
+        )
+
+        self.assertEqual(result.transaction_id, f'bkash_{self.order.id}')
+        self.assertEqual(result.redirect_url, 'https://bkash.test/checkout')
+        self.assertEqual(result.raw_response['amount'], '980.00')
+
+    def test_bkash_strategy_executes_payment(self):
+        result = BkashPaymentStrategy().execute_payment('bkash_sandbox_order_1')
+
+        self.assertEqual(result.status, Payment.Status.SUCCEEDED)
+        self.assertTrue(result.raw_response['simulated'])
+
+    def test_bkash_strategy_queries_payment(self):
+        result = BkashPaymentStrategy().query_payment('bkash_sandbox_order_1')
+
+        self.assertEqual(result.status, Payment.Status.PENDING)
+        self.assertTrue(result.raw_response['simulated'])
+
+    def test_bkash_strategy_maps_client_execute_response(self):
+        result = BkashPaymentStrategy(client=FakeBkashClient()).execute_payment('bkash_123')
+
+        self.assertEqual(result.status, Payment.Status.SUCCEEDED)
+        self.assertEqual(result.transaction_id, 'bkash_123')
