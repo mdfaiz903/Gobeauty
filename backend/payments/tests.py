@@ -4,6 +4,10 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from orders.models import Order
+from payments.factories import (
+    PaymentProviderFactory,
+    UnsupportedPaymentProviderError,
+)
 from payments.models import Payment
 from payments.strategies import (
     BkashPaymentStrategy,
@@ -214,3 +218,24 @@ class BkashPaymentStrategyTests(TestCase):
 
         self.assertEqual(result.status, Payment.Status.SUCCEEDED)
         self.assertEqual(result.transaction_id, 'bkash_123')
+
+
+class PaymentProviderFactoryTests(TestCase):
+    def test_factory_creates_stripe_strategy(self):
+        strategy = PaymentProviderFactory.create(Payment.Provider.STRIPE)
+
+        self.assertIsInstance(strategy, StripePaymentStrategy)
+
+    def test_factory_creates_bkash_strategy(self):
+        strategy = PaymentProviderFactory.create(Payment.Provider.BKASH)
+
+        self.assertIsInstance(strategy, BkashPaymentStrategy)
+
+    def test_factory_accepts_case_insensitive_provider(self):
+        strategy = PaymentProviderFactory.create('  StRiPe  ')
+
+        self.assertIsInstance(strategy, StripePaymentStrategy)
+
+    def test_factory_rejects_unsupported_provider(self):
+        with self.assertRaises(UnsupportedPaymentProviderError):
+            PaymentProviderFactory.create('paypal')
