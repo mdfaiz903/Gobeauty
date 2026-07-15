@@ -315,6 +315,13 @@ export default function App() {
   const [ordersStatus, setOrdersStatus] = useState('idle');
   const [productStatus, setProductStatus] = useState('idle');
   const [checkoutState, setCheckoutState] = useState({ status: 'idle', message: '' });
+  const [paymentProvider, setPaymentProvider] = useState('bkash');
+  const [paymentState, setPaymentState] = useState({
+    status: 'idle',
+    message: '',
+    payment: null,
+    redirectUrl: '',
+  });
 
   const cartCount = cart.reduce((sum, item) => sum + item.qty, 0);
   const cartTotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
@@ -505,7 +512,7 @@ export default function App() {
     setAuthMessage('');
   }
 
-  async function createOrder() {
+  async function createOrder(provider) {
     if (!tokens?.access) {
       setCheckoutState({ status: 'error', message: 'Please login before checkout.' });
       navigate('account');
@@ -513,6 +520,7 @@ export default function App() {
     }
 
     setCheckoutState({ status: 'loading', message: 'Creating your order...' });
+    setPaymentState({ status: 'idle', message: '', payment: null, redirectUrl: '' });
     try {
       const order = await apiRequest('/orders/', {
         method: 'POST',
@@ -521,15 +529,88 @@ export default function App() {
           items: cart.map((item) => ({ product_id: item.id, quantity: item.qty })),
         },
       });
+      setCheckoutState({ status: 'loading', message: 'Order created. Starting payment...' });
+      const paymentSession = await initiatePayment(order.id, provider);
       setCart([]);
       setCheckoutState({
         status: 'success',
-        message: `Order #${order.id} created. Payment gateway integration is the next phase.`,
+        message: `Order #${order.id} created. ${providerLabel(provider)} payment is ready.`,
+      });
+      setPaymentState({
+        status: 'success',
+        message: `${providerLabel(provider)} payment session created.`,
+        payment: paymentSession.payment,
+        redirectUrl: paymentSession.redirect_url || '',
       });
       await loadOrders(tokens.access);
       navigate('account');
     } catch (error) {
       setCheckoutState({ status: 'error', message: error.message });
+      setPaymentState({ status: 'error', message: error.message, payment: null, redirectUrl: '' });
+    }
+  }
+
+  async function initiatePayment(orderId, provider) {
+    return apiRequest('/payments/initiate/', {
+      method: 'POST',
+      token: tokens.access,
+      body: {
+        order_id: orderId,
+        provider,
+        success_url: `${window.location.origin}/payment/success`,
+        cancel_url: `${window.location.origin}/payment/cancel`,
+      },
+    });
+  }
+
+  async function queryBkashPayment(transactionId = paymentState.payment?.transaction_id) {
+    if (!tokens?.access || !transactionId) return;
+
+    setPaymentState((current) => ({
+      ...current,
+      status: 'loading',
+      message: 'Checking bKash payment status...',
+    }));
+    try {
+      const data = await apiRequest('/payments/bkash/query/', {
+        method: 'POST',
+        token: tokens.access,
+        body: { paymentID: transactionId },
+      });
+      setPaymentState({
+        status: 'success',
+        message: `bKash payment is ${data.payment.status}.`,
+        payment: data.payment,
+        redirectUrl: paymentState.redirectUrl,
+      });
+      await loadOrders(tokens.access);
+    } catch (error) {
+      setPaymentState((current) => ({ ...current, status: 'error', message: error.message }));
+    }
+  }
+
+  async function executeBkashSandbox(transactionId = paymentState.payment?.transaction_id) {
+    if (!transactionId) return;
+
+    setPaymentState((current) => ({
+      ...current,
+      status: 'loading',
+      message: 'Executing bKash sandbox payment...',
+    }));
+    try {
+      const data = await apiRequest('/payments/bkash/execute/', {
+        method: 'POST',
+        body: { paymentID: transactionId },
+      });
+      setPaymentState({
+        status: 'success',
+        message: 'bKash sandbox payment succeeded. Stock was reduced by backend transaction.',
+        payment: data.payment,
+        redirectUrl: paymentState.redirectUrl,
+      });
+      if (tokens?.access) await loadOrders(tokens.access);
+    } catch (error) {
+      setPaymentState((current) => ({ ...current, status: 'error', message: error.message }));
     }
   }
 
@@ -589,8 +670,10 @@ export default function App() {
             cart={cart}
             total={cartTotal}
             checkoutState={checkoutState}
+            paymentProvider={paymentProvider}
+            onPaymentProviderChange={setPaymentProvider}
             isAuthenticated={Boolean(authUser)}
-            onSubmit={createOrder}
+            onSubmit={() => createOrder(paymentProvider)}
           />
         )}
         {view === 'account' && (
@@ -600,10 +683,13 @@ export default function App() {
             authStatus={authStatus}
             ordersStatus={ordersStatus}
             message={authMessage || checkoutState.message}
+            paymentState={paymentState}
             onLogin={login}
             onRegister={register}
             onLogout={logout}
             onNavigate={navigate}
+            onBkashQuery={queryBkashPayment}
+            onBkashExecute={executeBkashSandbox}
           />
         )}
       </main>
@@ -620,6 +706,10 @@ export default function App() {
       />
     </div>
   );
+}
+
+function providerLabel(provider) {
+  return provider === 'stripe' ? 'Stripe card' : 'bKash';
 }
 
 function TopNotice() {
@@ -1085,7 +1175,15 @@ function CartPage({ cart, total, onQty, onCheckout }) {
   );
 }
 
-function CheckoutPage({ cart, total, checkoutState, isAuthenticated, onSubmit }) {
+function CheckoutPage({
+  cart,
+  total,
+  checkoutState,
+  paymentProvider,
+  onPaymentProviderChange,
+  isAuthenticated,
+  onSubmit,
+}) {
   return (
     <section className="checkout page-pad">
       <div>
@@ -1106,8 +1204,13 @@ function CheckoutPage({ cart, total, checkoutState, isAuthenticated, onSubmit })
           </label>
           <label>
             Payment method
-            <PaymentPlaceholder />
+            <PaymentMethodSelector
+              value={paymentProvider}
+              onChange={onPaymentProviderChange}
+              disabled={!isAuthenticated}
+            />
           </label>
+          <PaymentFlowPreview provider={paymentProvider} />
           {checkoutState.message && <p className="form-message">{checkoutState.message}</p>}
           <button
             type="button"
@@ -1124,17 +1227,51 @@ function CheckoutPage({ cart, total, checkoutState, isAuthenticated, onSubmit })
   );
 }
 
-function PaymentPlaceholder() {
+function PaymentMethodSelector({ value, onChange, disabled }) {
+  const providers = [
+    {
+      key: 'bkash',
+      name: 'bKash',
+      detail: 'Sandbox callback can execute and query from your account dashboard.',
+    },
+    {
+      key: 'stripe',
+      name: 'Stripe card',
+      detail: 'Creates a checkout session; final success is confirmed by webhook.',
+    },
+  ];
+
   return (
-    <div className="payment-placeholder">
-      <div>
-        <strong>Payment gateway placeholder</strong>
-        <span>Stripe and bKash strategy flow will attach here in Phase 5.</span>
-      </div>
+    <div className="payment-methods" role="radiogroup" aria-label="Payment provider">
+      {providers.map((provider) => (
+        <button
+          key={provider.key}
+          type="button"
+          className={value === provider.key ? 'selected' : ''}
+          disabled={disabled}
+          onClick={() => onChange(provider.key)}
+        >
+          <strong>{provider.name}</strong>
+          <span>{provider.detail}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function PaymentFlowPreview({ provider }) {
+  const steps =
+    provider === 'stripe'
+      ? ['Backend creates order', 'Stripe strategy creates checkout session', 'Webhook confirms payment and stock']
+      : ['Backend creates order', 'bKash strategy creates sandbox payment', 'Execute callback confirms payment and stock'];
+
+  return (
+    <div className="payment-flow-card">
+      <strong>{providerLabel(provider)} payment flow</strong>
       <ol>
-        <li>Order created by backend</li>
-        <li>Payment provider selected</li>
-        <li>Webhook confirms stock reduction</li>
+        {steps.map((step) => (
+          <li key={step}>{step}</li>
+        ))}
       </ol>
     </div>
   );
@@ -1166,10 +1303,13 @@ function AccountPage({
   authStatus,
   ordersStatus,
   message,
+  paymentState,
   onLogin,
   onRegister,
   onLogout,
   onNavigate,
+  onBkashQuery,
+  onBkashExecute,
 }) {
   const [mode, setMode] = useState('login');
   const [form, setForm] = useState({
@@ -1221,6 +1361,11 @@ function AccountPage({
         </div>
 
         {message && <p className="form-message dashboard-message">{message}</p>}
+        {paymentState?.message && (
+          <p className={`form-message dashboard-message ${paymentState.status === 'error' ? 'error' : ''}`}>
+            {paymentState.message}
+          </p>
+        )}
         {authStatus === 'loading' && (
           <StatusBanner title="Checking session" message="Refreshing your account details." />
         )}
@@ -1252,12 +1397,11 @@ function AccountPage({
           </div>
 
           <div className="dashboard-panel delivery-panel">
-            <SectionHeading label="Delivery" title="Saved preferences" />
-            <div className="preference-list">
-              <span>Dhaka courier-ready checkout</span>
-              <span>Free delivery from Tk 2,500</span>
-              <span>Payment strategy integration next phase</span>
-            </div>
+            <PaymentStatusCard
+              paymentState={paymentState}
+              onBkashQuery={onBkashQuery}
+              onBkashExecute={onBkashExecute}
+            />
           </div>
 
           <OrderHistory orders={orders} ordersStatus={ordersStatus} />
@@ -1319,6 +1463,63 @@ function AccountPage({
       </div>
       <OrderHistory orders={[]} ordersStatus="idle" />
     </section>
+  );
+}
+
+function PaymentStatusCard({ paymentState, onBkashQuery, onBkashExecute }) {
+  const payment = paymentState?.payment;
+  const isBkash = payment?.provider === 'bkash';
+
+  if (!payment) {
+    return (
+      <>
+        <SectionHeading label="Payments" title="Gateway status" />
+        <div className="preference-list">
+          <span>Stripe and bKash are connected through backend strategies</span>
+          <span>Stock is reduced only after successful payment confirmation</span>
+          <span>New payment sessions will appear here after checkout</span>
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <SectionHeading label="Payments" title="Latest payment" />
+      <div className="payment-status-card">
+        <div>
+          <span>Provider</span>
+          <strong>{providerLabel(payment.provider)}</strong>
+        </div>
+        <div>
+          <span>Status</span>
+          <strong>{payment.status}</strong>
+        </div>
+        <div>
+          <span>Transaction</span>
+          <code>{payment.transaction_id}</code>
+        </div>
+        <div>
+          <span>Amount</span>
+          <strong>{formatPrice(payment.amount)}</strong>
+        </div>
+        {paymentState.redirectUrl && (
+          <a className="secondary-button wide payment-link" href={paymentState.redirectUrl} target="_blank" rel="noreferrer">
+            Open payment page
+          </a>
+        )}
+        {isBkash && (
+          <div className="payment-actions">
+            <button type="button" className="secondary-button" onClick={() => onBkashQuery(payment.transaction_id)}>
+              Query bKash
+            </button>
+            <button type="button" className="primary-button" onClick={() => onBkashExecute(payment.transaction_id)}>
+              Execute sandbox
+            </button>
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 
