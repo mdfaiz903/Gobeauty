@@ -6,6 +6,8 @@ import time
 from django.conf import settings
 from django.db import transaction
 
+from catalog.models import Product
+from orders.models import Order
 from payments.factories import PaymentProviderFactory
 from payments.models import Payment
 from payments.strategies import PaymentRequest
@@ -73,10 +75,11 @@ class StripeWebhookService:
 
         transaction_id = self._extract_transaction_id(event)
         payment = self._get_payment(transaction_id)
-        payment.status = self._map_event_status(event['type'])
-        payment.raw_response = event
-        payment.save(update_fields=['status', 'raw_response', 'updated_at'])
-        return payment
+        return PaymentFinalizationService().update_payment_status(
+            payment=payment,
+            next_status=self._map_event_status(event['type']),
+            raw_response=event,
+        )
 
     def _parse_payload(self, payload):
         try:
@@ -184,10 +187,11 @@ class BkashPaymentService:
 
     def _update_payment(self, result):
         payment = self._get_payment(result.transaction_id)
-        payment.status = result.status
-        payment.raw_response = result.raw_response
-        payment.save(update_fields=['status', 'raw_response', 'updated_at'])
-        return payment
+        return PaymentFinalizationService().update_payment_status(
+            payment=payment,
+            next_status=result.status,
+            raw_response=result.raw_response,
+        )
 
     def _get_payment(self, transaction_id):
         try:
@@ -197,3 +201,52 @@ class BkashPaymentService:
             )
         except Payment.DoesNotExist as exc:
             raise ValueError('bKash payment was not found.') from exc
+
+
+class PaymentFinalizationService:
+    @transaction.atomic
+    def update_payment_status(self, *, payment, next_status, raw_response):
+        locked_payment = Payment.objects.select_for_update().select_related('order').get(
+            pk=payment.pk,
+        )
+
+        if locked_payment.status == Payment.Status.SUCCEEDED:
+            locked_payment.raw_response = raw_response
+            locked_payment.save(update_fields=['raw_response', 'updated_at'])
+            return locked_payment
+
+        locked_payment.status = next_status
+        locked_payment.raw_response = raw_response
+        locked_payment.save(update_fields=['status', 'raw_response', 'updated_at'])
+
+        if next_status == Payment.Status.SUCCEEDED:
+            self._mark_order_paid(locked_payment.order_id)
+
+        locked_payment.refresh_from_db()
+        return locked_payment
+
+    def _mark_order_paid(self, order_id):
+        order = Order.objects.select_for_update().get(pk=order_id)
+        if order.status == Order.Status.PAID:
+            return
+
+        order_items = list(order.items.select_related('product'))
+        products = self._get_locked_products(order_items)
+        self._reduce_product_stock(order_items, products)
+
+        order.status = Order.Status.PAID
+        order.save(update_fields=['status', 'updated_at'])
+
+    def _get_locked_products(self, order_items):
+        product_ids = [item.product_id for item in order_items]
+        return Product.objects.select_for_update().in_bulk(product_ids)
+
+    def _reduce_product_stock(self, order_items, products):
+        for item in order_items:
+            product = products[item.product_id]
+            if product.stock < item.quantity:
+                raise ValueError(
+                    f'Insufficient stock for {product.sku}. Available: {product.stock}',
+                )
+            product.stock -= item.quantity
+            product.save(update_fields=['stock', 'updated_at'])

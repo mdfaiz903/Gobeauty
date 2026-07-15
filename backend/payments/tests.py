@@ -10,7 +10,8 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from orders.models import Order
+from catalog.models import Category, Product
+from orders.models import Order, OrderItem
 from payments.factories import (
     PaymentProviderFactory,
     UnsupportedPaymentProviderError,
@@ -574,3 +575,127 @@ class BkashCallbackApiTests(APITestCase):
         response = self.client.post(self.query_url, {}, format='json')
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class PaymentStockFinalizationTests(APITestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            email='stock-payer@example.com',
+            password='StrongPass123!',
+        )
+        self.category = Category.objects.create(name='Makeup', slug='makeup')
+        self.product = Product.objects.create(
+            category=self.category,
+            name='Velvet Lip Tint',
+            sku='GBD-LIP-001',
+            price=Decimal('750.00'),
+            stock=5,
+            status=Product.Status.ACTIVE,
+        )
+        self.order = Order.objects.create(
+            user=self.user,
+            total_amount=Decimal('1500.00'),
+        )
+        OrderItem.objects.create(
+            order=self.order,
+            product=self.product,
+            quantity=2,
+            price=self.product.price,
+            subtotal=Decimal('1500.00'),
+        )
+
+    def test_bkash_success_reduces_stock_and_marks_order_paid(self):
+        payment = self._create_payment(Payment.Provider.BKASH, 'bkash_stock_success')
+
+        response = self.client.post(
+            reverse('payments:bkash-execute'),
+            {'paymentID': payment.transaction_id},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.product.refresh_from_db()
+        self.order.refresh_from_db()
+        payment.refresh_from_db()
+        self.assertEqual(self.product.stock, 3)
+        self.assertEqual(self.order.status, Order.Status.PAID)
+        self.assertEqual(payment.status, Payment.Status.SUCCEEDED)
+
+    def test_success_callback_is_idempotent_for_stock(self):
+        payment = self._create_payment(Payment.Provider.BKASH, 'bkash_stock_once')
+        payload = {'paymentID': payment.transaction_id}
+
+        first_response = self.client.post(
+            reverse('payments:bkash-execute'),
+            payload,
+            format='json',
+        )
+        second_response = self.client.post(
+            reverse('payments:bkash-execute'),
+            payload,
+            format='json',
+        )
+
+        self.assertEqual(first_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(second_response.status_code, status.HTTP_200_OK)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock, 3)
+
+    @override_settings(STRIPE_WEBHOOK_SECRET='')
+    def test_stripe_success_reduces_stock_and_marks_order_paid(self):
+        payment = self._create_payment(Payment.Provider.STRIPE, 'cs_stock_success')
+
+        response = self.client.post(
+            reverse('payments:stripe-webhook'),
+            data=self._stripe_event(payment.transaction_id),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.product.refresh_from_db()
+        self.order.refresh_from_db()
+        payment.refresh_from_db()
+        self.assertEqual(self.product.stock, 3)
+        self.assertEqual(self.order.status, Order.Status.PAID)
+        self.assertEqual(payment.status, Payment.Status.SUCCEEDED)
+
+    def test_success_fails_when_stock_is_no_longer_available(self):
+        self.product.stock = 1
+        self.product.save(update_fields=['stock'])
+        payment = self._create_payment(Payment.Provider.BKASH, 'bkash_stock_fail')
+
+        response = self.client.post(
+            reverse('payments:bkash-execute'),
+            {'paymentID': payment.transaction_id},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.product.refresh_from_db()
+        self.order.refresh_from_db()
+        payment.refresh_from_db()
+        self.assertEqual(self.product.stock, 1)
+        self.assertEqual(self.order.status, Order.Status.PENDING)
+        self.assertEqual(payment.status, Payment.Status.PENDING)
+
+    def _create_payment(self, provider, transaction_id):
+        return Payment.objects.create(
+            order=self.order,
+            provider=provider,
+            amount=self.order.total_amount,
+            transaction_id=transaction_id,
+            status=Payment.Status.PENDING,
+        )
+
+    def _stripe_event(self, transaction_id):
+        return json.dumps(
+            {
+                'id': 'evt_stock_test',
+                'type': 'checkout.session.completed',
+                'data': {
+                    'object': {
+                        'id': transaction_id,
+                    },
+                },
+            },
+        )
