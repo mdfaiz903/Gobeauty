@@ -50,13 +50,30 @@ class Product(models.Model):
     )
     name = models.CharField(max_length=180)
     sku = models.CharField(max_length=80, unique=True)
+    brand = models.CharField(max_length=120, blank=True)
     description = models.TextField(blank=True)
+    ingredients = models.TextField(blank=True)
+    how_to_use = models.TextField(blank=True)
     image = models.ImageField(upload_to='products/', blank=True)
+    regular_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+    )
     price = models.DecimalField(
         max_digits=12,
         decimal_places=2,
         validators=[MinValueValidator(0)],
     )
+    average_rating = models.DecimalField(
+        max_digits=3,
+        decimal_places=2,
+        default=0,
+        validators=[MinValueValidator(0)],
+    )
+    review_count = models.PositiveIntegerField(default=0)
     stock = models.PositiveIntegerField(default=0)
     status = models.CharField(
         max_length=20,
@@ -81,3 +98,33 @@ class Product(models.Model):
     @property
     def is_active(self):
         return self.status == self.Status.ACTIVE
+
+    @property
+    def discount_percent(self):
+        if not self.regular_price or self.regular_price <= self.price:
+            return 0
+
+        discount = ((self.regular_price - self.price) / self.regular_price) * 100
+        return round(discount)
+
+
+class ProductImage(models.Model):
+    product = models.ForeignKey(
+        Product,
+        related_name='gallery_images',
+        on_delete=models.CASCADE,
+    )
+    image = models.ImageField(upload_to='products/gallery/')
+    alt_text = models.CharField(max_length=180, blank=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    is_primary = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['sort_order', 'id']
+        indexes = [
+            models.Index(fields=['product', 'sort_order'], name='product_image_order_idx'),
+        ]
+
+    def __str__(self):
+        return self.alt_text or self.product.name

@@ -24,6 +24,7 @@ class CategorySerializer(serializers.ModelSerializer):
 class ProductListSerializer(serializers.ModelSerializer):
     category = CategorySerializer(read_only=True)
     image_url = serializers.SerializerMethodField()
+    discount_percent = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Product
@@ -32,8 +33,13 @@ class ProductListSerializer(serializers.ModelSerializer):
             'category',
             'name',
             'sku',
+            'brand',
             'image_url',
+            'regular_price',
             'price',
+            'discount_percent',
+            'average_rating',
+            'review_count',
             'stock',
             'status',
         )
@@ -52,12 +58,34 @@ class ProductListSerializer(serializers.ModelSerializer):
 
 
 class ProductDetailSerializer(ProductListSerializer):
+    gallery = serializers.SerializerMethodField()
+
     class Meta(ProductListSerializer.Meta):
         fields = ProductListSerializer.Meta.fields + (
             'description',
+            'ingredients',
+            'how_to_use',
+            'gallery',
             'created_at',
             'updated_at',
         )
+
+    @extend_schema_field(list[str])
+    def get_gallery(self, product):
+        images = []
+        if product.image:
+            images.append(self.build_image_url(product.image.url))
+
+        for product_image in product.gallery_images.all():
+            images.append(self.build_image_url(product_image.image.url))
+
+        return images
+
+    def build_image_url(self, image_url):
+        request = self.context.get('request')
+        if request:
+            return request.build_absolute_uri(image_url)
+        return image_url
 
 
 class ProductAdminSerializer(serializers.ModelSerializer):
@@ -68,9 +96,15 @@ class ProductAdminSerializer(serializers.ModelSerializer):
             'category',
             'name',
             'sku',
+            'brand',
             'description',
+            'ingredients',
+            'how_to_use',
             'image',
+            'regular_price',
             'price',
+            'average_rating',
+            'review_count',
             'stock',
             'status',
             'created_at',

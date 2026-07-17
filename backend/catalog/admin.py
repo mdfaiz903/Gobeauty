@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from catalog.models import Category, Product
+from catalog.models import Category, Product, ProductImage
 
 
 @admin.register(Category)
@@ -11,12 +11,30 @@ class CategoryAdmin(admin.ModelAdmin):
     prepopulated_fields = {'slug': ('name',)}
 
 
+class ProductImageInline(admin.TabularInline):
+    model = ProductImage
+    extra = 1
+    fields = ('image', 'alt_text', 'sort_order', 'is_primary')
+
+
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ('name', 'sku', 'category', 'price', 'stock', 'status', 'has_image', 'updated_at')
+    list_display = (
+        'name',
+        'sku',
+        'brand',
+        'category',
+        'regular_price',
+        'price',
+        'stock',
+        'status',
+        'has_image',
+        'updated_at',
+    )
     list_filter = ('status', 'category')
-    search_fields = ('name', 'sku', 'description')
+    search_fields = ('name', 'sku', 'brand', 'description')
     autocomplete_fields = ('category',)
+    inlines = (ProductImageInline,)
 
     def has_image(self, product):
         return bool(product.image)

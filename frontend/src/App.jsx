@@ -253,12 +253,14 @@ function slugify(value) {
 function enrichProduct(product) {
   const categoryName = product.category?.name || product.category || 'Skincare';
   const price = Number(product.price || 0);
+  const regularPrice = Number(product.regular_price || product.compareAt || 0);
   const visual = productVisuals[product.sku] || {};
   const image =
     product.image_url ||
     product.image ||
     visual.image ||
     'https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=900&q=80';
+  const gallery = normalizeGallery(product.gallery, image, visual.gallery);
 
   return {
     ...product,
@@ -268,14 +270,22 @@ function enrichProduct(product) {
     brand: product.brand || visual.brand || 'Go Beauty Lab',
     skinType: product.skinType || visual.skinType || ['All'],
     price,
-    compareAt: Number(product.compareAt || Math.round(price * 1.18)),
-    rating: product.rating || visual.rating || 4.5,
-    reviews: product.reviews || visual.reviews || 24,
+    compareAt: regularPrice || Number(product.compareAt || Math.round(price * 1.18)),
+    rating: Number(product.average_rating || product.rating || visual.rating || 4.5),
+    reviews: Number(product.review_count || product.reviews || visual.reviews || 24),
     badge: product.stock > 0 ? visual.badge || 'Available' : 'Out of stock',
+    discountPercent: Number(product.discount_percent || 0),
     image,
-    gallery: product.gallery || visual.gallery || [image],
+    gallery,
     description: product.description || 'Authentic beauty product available from Go Beauty Bangladesh.',
+    ingredients: product.ingredients || 'Ingredient information will be updated soon.',
+    howToUse: product.how_to_use || product.howToUse || 'Use as directed on clean skin.',
   };
+}
+
+function normalizeGallery(apiGallery, image, visualGallery = []) {
+  const gallery = Array.isArray(apiGallery) && apiGallery.length ? apiGallery : visualGallery;
+  return Array.from(new Set([image, ...gallery].filter(Boolean)));
 }
 
 function buildCategoryTree(apiCategories) {
@@ -1185,50 +1195,169 @@ function ProductCard({ product, onOpen, onAdd }) {
 }
 
 function ProductDetail({ product, relatedProducts, productStatus, onAddToCart, onProductOpen }) {
+  const [activeImage, setActiveImage] = useState(product.gallery[0]);
+  const [activeTab, setActiveTab] = useState('description');
+  const detailTabs = buildProductDetailTabs(product);
+
+  useEffect(() => {
+    setActiveImage(product.gallery[0]);
+    setActiveTab('description');
+  }, [product.id, product.gallery]);
+
   return (
-    <section className="product-detail page-pad">
-      <div className="gallery-panel">
-        <img src={product.gallery[0]} alt={product.name} />
-        <div>
-          {product.gallery.map((image) => (
-            <img key={image} src={image} alt="" />
-          ))}
+    <>
+      <section className="product-detail page-pad">
+        <div className="detail-gallery">
+          <div className="gallery-thumbs" aria-label="Product image thumbnails">
+            {product.gallery.map((image, index) => (
+              <button
+                key={image}
+                type="button"
+                className={image === activeImage ? 'selected' : ''}
+                onClick={() => setActiveImage(image)}
+              >
+                <img src={image} alt={`${product.name} view ${index + 1}`} />
+              </button>
+            ))}
+          </div>
+          <div className="gallery-stage">
+            {product.discountPercent > 0 && <span>-{product.discountPercent}%</span>}
+            <img src={activeImage} alt={product.name} />
+          </div>
         </div>
-      </div>
 
-      <div className="detail-copy">
-        <p>{product.brand}</p>
-        <h1>{product.name}</h1>
-        <div className="rating-row">
-          <span>{'★'.repeat(Math.round(product.rating))}</span>
-          <small>{product.rating} rating from {product.reviews} reviews</small>
+        <div className="detail-copy">
+          <p>{product.category}</p>
+          <h1>{product.name}</h1>
+          <div className="brand-chip">{product.brand}</div>
+          <div className="detail-price">
+            {product.compareAt > product.price && <span>{formatPrice(product.compareAt)}</span>}
+            <strong>{formatPrice(product.price)}</strong>
+          </div>
+          <RatingSummary rating={product.rating} reviews={product.reviews} />
+          <ul className="product-highlights">
+            <li>Authentic imported beauty product.</li>
+            <li>Backend stock and pricing are validated before checkout.</li>
+            <li>Secure payment with bKash, Stripe, or Cash on Delivery.</li>
+          </ul>
+          <div className="detail-tags">
+            {product.skinType.map((type) => (
+              <span key={type}>{type}</span>
+            ))}
+            <span>{product.stock > 0 ? `${product.stock} in stock` : 'Restocking soon'}</span>
+          </div>
+          <div className="detail-actions">
+            <button
+              type="button"
+              className="qty-button"
+              aria-label="Selected quantity"
+            >
+              1
+            </button>
+            <button
+              type="button"
+              className="primary-button"
+              disabled={product.stock === 0}
+              onClick={() => onAddToCart(product)}
+            >
+              {product.stock === 0 ? 'Notify me' : 'Add to cart'}
+            </button>
+          </div>
+          <dl className="product-meta">
+            <div>
+              <dt>SKU</dt>
+              <dd>{product.sku}</dd>
+            </div>
+            <div>
+              <dt>Category</dt>
+              <dd>{product.category}</dd>
+            </div>
+          </dl>
         </div>
-        <div className="detail-price">
-          <strong>{formatPrice(product.price)}</strong>
-          <span>{formatPrice(product.compareAt)}</span>
-        </div>
-        <p>{product.description}</p>
-        <div className="detail-tags">
-          {product.skinType.map((type) => (
-            <span key={type}>{type}</span>
-          ))}
-          <span>{product.stock > 0 ? `${product.stock} in stock` : 'Restocking soon'}</span>
-        </div>
-        <button
-          type="button"
-          className="primary-button wide"
-          disabled={product.stock === 0}
-          onClick={() => onAddToCart(product)}
-        >
-          {product.stock === 0 ? 'Notify me' : 'Add to cart'}
-        </button>
 
+        <div className="product-tabs">
+          <div role="tablist" aria-label="Product details">
+            {detailTabs.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === tab.key}
+                className={activeTab === tab.key ? 'selected' : ''}
+                onClick={() => setActiveTab(tab.key)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <div className="tab-panel">
+            {detailTabs.find((tab) => tab.key === activeTab)?.content}
+          </div>
+        </div>
+
+        <div className="related-row">
+          <h2>Related products</h2>
+          {productStatus === 'loading' && (
+            <StatusBanner title="Finding recommendations" message="Loading DFS-based related products from the backend." />
+          )}
+          {productStatus === 'fallback' && (
+            <StatusBanner
+              tone="warning"
+              title="Local recommendations"
+              message="Recommendation API is unavailable, so nearby catalog products are shown."
+            />
+          )}
+          <ProductGrid products={relatedProducts} onProductOpen={onProductOpen} onAddToCart={onAddToCart} />
+        </div>
+      </section>
+    </>
+  );
+}
+
+function RatingSummary({ rating, reviews }) {
+  const roundedRating = Math.max(0, Math.min(5, Math.round(rating)));
+
+  return (
+    <div className="rating-row">
+      <span>{'★'.repeat(roundedRating)}{'☆'.repeat(5 - roundedRating)}</span>
+      <small>
+        {rating.toFixed(1)} ({reviews} customer reviews)
+      </small>
+    </div>
+  );
+}
+
+function buildProductDetailTabs(product) {
+  return [
+    {
+      key: 'description',
+      label: 'Description',
+      content: (
+        <>
+          <p>{product.description}</p>
+          <p>{product.howToUse}</p>
+        </>
+      ),
+    },
+    {
+      key: 'brand',
+      label: 'Brand',
+      content: (
+        <p>
+          {product.brand} products are selected for authentic beauty shoppers with clear catalog
+          information, stock visibility, and secure checkout.
+        </p>
+      ),
+    },
+    {
+      key: 'reviews',
+      label: `Reviews (${product.reviews})`,
+      content: (
         <div className="reviews-box">
-          <h2>Customer reviews</h2>
           <article>
             <strong>Farhana A.</strong>
             <span>Verified customer</span>
-            <p>Texture feels light and delivery was fast. I liked the clear expiry information.</p>
+            <p>Texture feels light and delivery was fast. I liked the clear product information.</p>
           </article>
           <article>
             <strong>Nusrat J.</strong>
@@ -1236,24 +1365,14 @@ function ProductDetail({ product, relatedProducts, productStatus, onAddToCart, o
             <p>Good packaging and the product matched the photos.</p>
           </article>
         </div>
-      </div>
-
-      <div className="related-row">
-        <SectionHeading label="You may also like" title="Related products" />
-        {productStatus === 'loading' && (
-          <StatusBanner title="Finding recommendations" message="Loading DFS-based related products from the backend." />
-        )}
-        {productStatus === 'fallback' && (
-          <StatusBanner
-            tone="warning"
-            title="Local recommendations"
-            message="Recommendation API is unavailable, so nearby catalog products are shown."
-          />
-        )}
-        <ProductGrid products={relatedProducts} onProductOpen={onProductOpen} onAddToCart={onAddToCart} />
-      </div>
-    </section>
-  );
+      ),
+    },
+    {
+      key: 'ingredients',
+      label: 'Ingredients',
+      content: <p>{product.ingredients}</p>,
+    },
+  ];
 }
 
 function CartPage({ cart, total, onQty, onCheckout }) {

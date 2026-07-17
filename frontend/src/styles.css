@@ -880,46 +880,104 @@ img {
 
 .product-detail {
   display: grid;
-  gap: 38px;
-  grid-template-columns: minmax(280px, 0.94fr) minmax(320px, 1fr);
+  gap: clamp(24px, 3vw, 44px);
+  grid-template-columns: minmax(420px, 0.92fr) minmax(430px, 1fr);
 }
 
-.gallery-panel {
+.detail-gallery {
   display: grid;
   gap: 14px;
+  grid-template-columns: 86px minmax(0, 1fr);
+  min-width: 0;
 }
 
-.gallery-panel > img {
-  aspect-ratio: 1 / 1.05;
+.gallery-thumbs {
+  align-content: start;
+  display: grid;
+  gap: 10px;
+}
+
+.gallery-thumbs button {
+  background: #fff;
+  border: 1px solid var(--line);
   border-radius: 8px;
+  overflow: hidden;
+  padding: 0;
+}
+
+.gallery-thumbs button.selected {
+  border-color: var(--rose);
+  box-shadow: 0 0 0 2px rgba(233, 30, 131, 0.14);
+}
+
+.gallery-thumbs img {
+  aspect-ratio: 1;
+  display: block;
   height: 100%;
   object-fit: cover;
   width: 100%;
 }
 
-.gallery-panel div {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(4, 1fr);
-}
-
-.gallery-panel div img {
-  aspect-ratio: 1;
+.gallery-stage {
+  align-items: center;
+  background: #fff;
   border: 1px solid var(--line);
   border-radius: 8px;
+  display: flex;
+  justify-content: center;
+  min-height: 540px;
+  overflow: hidden;
+  position: relative;
+}
+
+.gallery-stage > span {
+  background: #7ec2df;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+  left: 16px;
+  padding: 6px 9px;
+  position: absolute;
+  top: 16px;
+  z-index: 1;
+}
+
+.gallery-stage img {
+  height: 100%;
   object-fit: cover;
   width: 100%;
 }
 
 .detail-copy {
+  align-content: start;
   display: grid;
-  gap: 18px;
+  gap: 14px;
 }
 
-.detail-copy > p:not(:first-child) {
+.brand-chip {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 900;
+  justify-self: start;
+  padding: 10px 14px;
+}
+
+.product-highlights {
   color: var(--muted);
-  font-size: 17px;
-  line-height: 1.7;
+  display: grid;
+  gap: 8px;
+  line-height: 1.6;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.detail-copy > p:not(:first-child),
+.tab-panel p {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.75;
 }
 
 .detail-price {
@@ -929,7 +987,12 @@ img {
 }
 
 .detail-price strong {
+  color: var(--rose);
   font-size: 30px;
+}
+
+.detail-price span {
+  font-size: 18px;
 }
 
 .detail-tags {
@@ -942,6 +1005,88 @@ img {
   background: var(--soft);
   color: var(--ink);
   position: static;
+}
+
+.detail-actions {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.detail-actions .primary-button {
+  min-width: 150px;
+}
+
+.qty-button {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  font-weight: 900;
+  height: 44px;
+  min-width: 48px;
+}
+
+.product-meta {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 10px;
+  margin: 8px 0 0;
+  padding-top: 16px;
+}
+
+.product-meta div {
+  display: flex;
+  gap: 8px;
+}
+
+.product-meta dt {
+  color: var(--ink);
+  font-weight: 900;
+}
+
+.product-meta dd {
+  color: var(--muted);
+  margin: 0;
+}
+
+.product-tabs {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 24px;
+  grid-column: 1 / -1;
+  margin-top: 12px;
+}
+
+.product-tabs [role="tablist"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  justify-content: center;
+}
+
+.product-tabs [role="tab"] {
+  background: transparent;
+  border: 0;
+  border-top: 2px solid transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 900;
+  min-height: 58px;
+  padding: 0 18px;
+  text-transform: uppercase;
+}
+
+.product-tabs [role="tab"].selected {
+  border-color: #7ec2df;
+  color: var(--ink);
+}
+
+.tab-panel {
+  margin: 0 auto;
+  max-width: 820px;
+  min-height: 120px;
+  width: 100%;
 }
 
 .reviews-box,
@@ -985,8 +1130,16 @@ img {
 }
 
 .related-row {
+  border-top: 1px solid var(--line);
   grid-column: 1 / -1;
   margin-top: 24px;
+  padding-top: 28px;
+}
+
+.related-row > h2 {
+  font-size: 22px;
+  margin: 0 0 18px;
+  text-transform: uppercase;
 }
 
 .account-dashboard {

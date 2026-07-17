@@ -44,7 +44,7 @@ class ProductListView(generics.ListAPIView):
         return Product.objects.filter(
             status=Product.Status.ACTIVE,
             category__is_active=True,
-        ).select_related('category', 'category__parent')
+        ).select_related('category', 'category__parent').prefetch_related('gallery_images')
 
 
 class ProductDetailView(generics.RetrieveAPIView):
