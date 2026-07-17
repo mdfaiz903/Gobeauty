@@ -220,9 +220,42 @@ BKASH_BASE_URL = get_env(
 
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Go Beauty Ordering & Payment API',
-    'DESCRIPTION': 'Backend API for products, orders, payments, and recommendations.',
+    'DESCRIPTION': (
+        'Production-oriented ecommerce assessment API covering custom email auth, '
+        'catalog/category hierarchy, DFS recommendations, order creation, and '
+        'strategy-based Stripe and bKash payment flows.'
+    ),
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
+    'TAGS': [
+        {'name': 'Auth', 'description': 'Email registration, JWT login, and current user profile.'},
+        {'name': 'Catalog', 'description': 'Public categories, products, and admin product management.'},
+        {'name': 'Recommendations', 'description': 'DFS-based related products from the cached category tree.'},
+        {'name': 'Orders', 'description': 'Authenticated order creation and order history.'},
+        {'name': 'Payments', 'description': 'Payment initiation plus Stripe and bKash callback flows.'},
+    ],
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SWAGGER_UI_SETTINGS': {
+        'persistAuthorization': True,
+    },
+    'ENUM_NAME_OVERRIDES': {
+        'ProductStatusEnum': [
+            ('active', 'Active'),
+            ('inactive', 'Inactive'),
+        ],
+        'OrderStatusEnum': [
+            ('pending', 'Pending'),
+            ('paid', 'Paid'),
+            ('canceled', 'Canceled'),
+        ],
+        'PaymentStatusEnum': [
+            ('initiated', 'Initiated'),
+            ('pending', 'Pending'),
+            ('succeeded', 'Succeeded'),
+            ('failed', 'Failed'),
+            ('canceled', 'Canceled'),
+        ],
+    },
 }
 
 CORS_ALLOWED_ORIGINS = get_env_list(

@@ -43,6 +43,14 @@ class PaymentSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class PaymentActionResponseSerializer(serializers.Serializer):
+    payment = PaymentSerializer(read_only=True)
+    redirect_url = serializers.URLField(required=False, allow_blank=True)
+    received = serializers.BooleanField(required=False)
+    executed = serializers.BooleanField(required=False)
+    queried = serializers.BooleanField(required=False)
+
+
 class BkashTransactionSerializer(serializers.Serializer):
     transaction_id = serializers.CharField(required=False, allow_blank=True)
     payment_id = serializers.CharField(required=False, allow_blank=True)

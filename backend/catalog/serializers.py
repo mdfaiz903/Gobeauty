@@ -1,3 +1,4 @@
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from catalog.models import Category, Product
@@ -38,6 +39,7 @@ class ProductListSerializer(serializers.ModelSerializer):
         )
         read_only_fields = fields
 
+    @extend_schema_field(str)
     def get_image_url(self, product):
         if not product.image:
             return ''
