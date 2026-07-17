@@ -1,7 +1,7 @@
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from catalog.models import Category, Product
+from catalog.models import Category, HomepageSlide, Product
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -114,3 +114,42 @@ class ProductAdminSerializer(serializers.ModelSerializer):
 
     def validate_sku(self, value):
         return value.strip().upper()
+
+
+class HomepageSlideSerializer(serializers.ModelSerializer):
+    image_url = serializers.SerializerMethodField()
+    product_id = serializers.IntegerField(source='product.id', read_only=True)
+
+    class Meta:
+        model = HomepageSlide
+        fields = (
+            'id',
+            'title',
+            'subtitle',
+            'eyebrow',
+            'image_url',
+            'product_id',
+            'primary_label',
+            'secondary_label',
+            'category_link',
+            'sort_order',
+        )
+        read_only_fields = fields
+
+    @extend_schema_field(str)
+    def get_image_url(self, slide):
+        image_url = self.get_slide_image_url(slide)
+        if not image_url:
+            return ''
+
+        request = self.context.get('request')
+        if request:
+            return request.build_absolute_uri(image_url)
+        return image_url
+
+    def get_slide_image_url(self, slide):
+        if slide.image:
+            return slide.image.url
+        if slide.product and slide.product.image:
+            return slide.product.image.url
+        return ''

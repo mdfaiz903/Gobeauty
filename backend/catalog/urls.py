@@ -4,6 +4,7 @@ from catalog.views import (
     AdminProductCreateView,
     AdminProductDetailView,
     CategoryListView,
+    HomepageSlideListView,
     ProductDetailView,
     ProductListView,
     ProductRecommendationListView,
@@ -13,6 +14,7 @@ app_name = 'catalog'
 
 urlpatterns = [
     path('categories/', CategoryListView.as_view(), name='category-list'),
+    path('home-slides/', HomepageSlideListView.as_view(), name='homepage-slide-list'),
     path('products/', ProductListView.as_view(), name='product-list'),
     path('products/<int:pk>/', ProductDetailView.as_view(), name='product-detail'),
     path(

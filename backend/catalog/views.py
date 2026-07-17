@@ -2,9 +2,10 @@ from drf_spectacular.utils import extend_schema
 from rest_framework import generics, permissions
 
 from accounts.permissions import IsAdminRole
-from catalog.models import Category, Product
+from catalog.models import Category, HomepageSlide, Product
 from catalog.serializers import (
     CategorySerializer,
+    HomepageSlideSerializer,
     ProductAdminSerializer,
     ProductDetailSerializer,
     ProductListSerializer,
@@ -26,6 +27,22 @@ class CategoryListView(generics.ListAPIView):
 
     def get_queryset(self):
         return Category.objects.filter(is_active=True).select_related('parent')
+
+
+class HomepageSlideListView(generics.ListAPIView):
+    serializer_class = HomepageSlideSerializer
+    permission_classes = (permissions.AllowAny,)
+
+    @extend_schema(
+        tags=['Catalog'],
+        summary='List active homepage slides',
+        description='Returns admin-managed storefront carousel slides. A slide can use its own image or the linked product image.',
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+    def get_queryset(self):
+        return HomepageSlide.objects.filter(is_active=True).select_related('product')
 
 
 class ProductListView(generics.ListAPIView):

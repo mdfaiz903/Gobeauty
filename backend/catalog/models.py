@@ -128,3 +128,33 @@ class ProductImage(models.Model):
 
     def __str__(self):
         return self.alt_text or self.product.name
+
+
+class HomepageSlide(models.Model):
+    title = models.CharField(max_length=180)
+    subtitle = models.CharField(max_length=220, blank=True)
+    eyebrow = models.CharField(max_length=140, blank=True)
+    image = models.ImageField(upload_to='home/slides/', blank=True)
+    product = models.ForeignKey(
+        Product,
+        null=True,
+        blank=True,
+        related_name='homepage_slides',
+        on_delete=models.SET_NULL,
+    )
+    primary_label = models.CharField(max_length=40, default='Shop now')
+    secondary_label = models.CharField(max_length=40, blank=True)
+    category_link = models.CharField(max_length=120, blank=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['sort_order', 'id']
+        indexes = [
+            models.Index(fields=['is_active', 'sort_order'], name='home_slide_active_order_idx'),
+        ]
+
+    def __str__(self):
+        return self.title

@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from catalog.models import Category, Product
+from catalog.models import Category, HomepageSlide, Product
 
 
 class Command(BaseCommand):
@@ -18,7 +18,8 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         self.create_admin_user(options['admin_email'], options['admin_password'])
         categories = self.create_categories()
-        self.create_products(categories)
+        products = self.create_products(categories)
+        self.create_homepage_slides(categories, products)
         self.stdout.write(self.style.SUCCESS('Seed data is ready.'))
 
     def create_admin_user(self, email, password):
@@ -76,10 +77,56 @@ class Command(BaseCommand):
         return categories
 
     def create_products(self, categories):
+        products = {}
         for product_data in self.product_seed_data(categories):
-            Product.objects.update_or_create(
+            product, _ = Product.objects.update_or_create(
                 sku=product_data['sku'],
                 defaults=product_data,
+            )
+            products[product.sku] = product
+        return products
+
+    def create_homepage_slides(self, categories, products):
+        slide_data = [
+            {
+                'title': 'Go Beauty Bangladesh',
+                'eyebrow': 'Authentic beauty, delivered across Bangladesh',
+                'subtitle': 'Curated skincare, makeup, and personal care at Gobeauty.bd.',
+                'product': products.get('GBD-SUN-001'),
+                'primary_label': 'Shop products',
+                'secondary_label': 'Track order',
+                'category_link': '',
+                'sort_order': 1,
+            },
+            {
+                'title': 'Sunscreen, serum, and barrier care',
+                'eyebrow': 'Daily skincare essentials',
+                'subtitle': 'Find humidity-friendly picks with backend-verified stock and current prices.',
+                'product': products.get('GBD-SER-001'),
+                'primary_label': 'Shop skincare',
+                'secondary_label': 'See categories',
+                'category_link': categories['skincare'].name,
+                'sort_order': 2,
+            },
+            {
+                'title': 'Soft color, easy checkout',
+                'eyebrow': 'Makeup for every day',
+                'subtitle': 'Browse makeup favorites and pay with bKash, card, or cash on delivery.',
+                'product': products.get('GBD-LIP-001'),
+                'primary_label': 'Shop makeup',
+                'secondary_label': 'My account',
+                'category_link': categories['makeup'].name,
+                'sort_order': 3,
+            },
+        ]
+
+        for slide in slide_data:
+            HomepageSlide.objects.update_or_create(
+                title=slide['title'],
+                defaults={
+                    **slide,
+                    'is_active': True,
+                },
             )
 
     def product_seed_data(self, categories):

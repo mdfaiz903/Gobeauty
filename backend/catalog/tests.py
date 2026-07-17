@@ -6,7 +6,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from catalog.models import Category, Product, ProductImage
+from catalog.models import Category, HomepageSlide, Product, ProductImage
 from recommendations.services import CATEGORY_TREE_CACHE_KEY
 
 
@@ -123,6 +123,32 @@ class CatalogApiTests(APITestCase):
         self.assertEqual(response.data['ingredients'], 'Centella, vitamin E, and UV filters.')
         self.assertEqual(response.data['how_to_use'], 'Apply every morning as the last skincare step.')
         self.assertEqual(len(response.data['gallery']), 2)
+
+    def test_public_homepage_slides_only_return_active_records(self):
+        HomepageSlide.objects.create(
+            title='Hero active',
+            eyebrow='Fresh drop',
+            subtitle='Featured product slide.',
+            product=self.product,
+            primary_label='Shop now',
+            category_link='Skincare',
+            sort_order=1,
+        )
+        HomepageSlide.objects.create(
+            title='Hero hidden',
+            subtitle='Should not be public.',
+            sort_order=2,
+            is_active=False,
+        )
+
+        response = self.client.get(reverse('catalog:homepage-slide-list'))
+        items = response_items(response)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]['title'], 'Hero active')
+        self.assertEqual(items[0]['product_id'], self.product.id)
+        self.assertEqual(items[0]['category_link'], 'Skincare')
 
     def test_admin_product_create_requires_admin_role(self):
         response = self.client.post(

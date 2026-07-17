@@ -288,6 +288,22 @@ function normalizeGallery(apiGallery, image, visualGallery = []) {
   return Array.from(new Set([image, ...gallery].filter(Boolean)));
 }
 
+function enrichHeroSlide(slide) {
+  return {
+    id: slide.id || slide.title,
+    eyebrow: slide.eyebrow || 'Authentic beauty',
+    title: slide.title || 'Go Beauty Bangladesh',
+    copy: slide.subtitle || 'Curated skincare, makeup, and personal care at Gobeauty.bd.',
+    image:
+      slide.image_url ||
+      'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=1800&q=80',
+    primary: slide.primary_label || 'Shop now',
+    secondary: slide.secondary_label || '',
+    productId: slide.product_id || null,
+    category: slide.category_link || '',
+  };
+}
+
 function buildCategoryTree(apiCategories) {
   const categories = listFromApi(apiCategories);
   if (!categories.length) return fallbackCategories;
@@ -311,6 +327,7 @@ export default function App() {
   const [filters, setFilters] = useState(filtersInitial);
   const [categories, setCategories] = useState(fallbackCategories);
   const [products, setProducts] = useState(fallbackProducts);
+  const [heroSlides, setHeroSlides] = useState([]);
   const [catalogStatus, setCatalogStatus] = useState('loading');
   const [selectedProduct, setSelectedProduct] = useState(fallbackProducts[0]);
   const [relatedProducts, setRelatedProducts] = useState([]);
@@ -381,16 +398,20 @@ export default function App() {
   async function loadCatalog() {
     setCatalogStatus('loading');
     try {
-      const [categoryData, productData] = await Promise.all([
+      const [categoryData, productData, slideData] = await Promise.all([
         apiRequest('/categories/'),
         apiRequest('/products/'),
+        apiRequest('/home-slides/'),
       ]);
       const nextProducts = listFromApi(productData).map(enrichProduct);
+      const nextSlides = listFromApi(slideData).map(enrichHeroSlide);
       setCategories(buildCategoryTree(categoryData));
       setProducts(nextProducts.length ? nextProducts : fallbackProducts);
+      setHeroSlides(nextSlides);
       setSelectedProduct(nextProducts[0] || fallbackProducts[0]);
       setCatalogStatus('ready');
     } catch {
+      setHeroSlides([]);
       setCatalogStatus('fallback');
     }
   }
@@ -679,6 +700,7 @@ export default function App() {
           <HomePage
             categories={categories}
             products={products}
+            heroSlides={heroSlides}
             catalogStatus={catalogStatus}
             onNavigate={navigate}
             onCategoryBrowse={browseCategory}
@@ -907,6 +929,7 @@ function Header({
 function HomePage({
   categories,
   products,
+  heroSlides,
   catalogStatus,
   onNavigate,
   onCategoryBrowse,
@@ -915,27 +938,13 @@ function HomePage({
 }) {
   return (
     <>
-      <section className="hero">
-        <div className="hero-media">
-          <img
-            src="https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=1600&q=80"
-            alt="Beauty products arranged for Go Beauty Bangladesh"
-          />
-        </div>
-        <div className="hero-content">
-          <p>Authentic beauty, delivered across Bangladesh</p>
-          <h1>Go Beauty Bangladesh</h1>
-          <span>Curated skincare, makeup, and personal care at Gobeauty.bd.</span>
-          <div className="hero-actions">
-            <button type="button" className="primary-button" onClick={() => onNavigate('products')}>
-              Shop products
-            </button>
-            <button type="button" className="secondary-button" onClick={() => onNavigate('account')}>
-              Track order
-            </button>
-          </div>
-        </div>
-      </section>
+      <HeroCarousel
+        slides={heroSlides}
+        products={products}
+        onNavigate={onNavigate}
+        onCategoryBrowse={onCategoryBrowse}
+        onProductOpen={onProductOpen}
+      />
 
       {catalogStatus === 'loading' && (
         <StatusBanner title="Loading live catalog" message="Products and categories are syncing from the backend API." />
@@ -948,8 +957,6 @@ function HomePage({
           message="Backend catalog is unavailable, so the storefront is showing local demo products."
         />
       )}
-
-      <BackendCapabilityStrip catalogStatus={catalogStatus} />
 
       <section className="category-strip">
         {categories.map((category) => (
@@ -996,28 +1003,129 @@ function HomePage({
   );
 }
 
-function BackendCapabilityStrip({ catalogStatus }) {
-  const items = [
-    ['Email JWT auth', 'Custom user model'],
-    ['DFS recommendations', 'Redis category tree'],
-    ['Server totals', 'Order item snapshots'],
-    ['Payment strategies', 'Stripe + bKash'],
+function HeroCarousel({ slides: backendSlides, products, onNavigate, onCategoryBrowse, onProductOpen }) {
+  const [activeSlide, setActiveSlide] = useState(0);
+  const fallbackSlides = [
+    {
+      eyebrow: 'Authentic beauty, delivered across Bangladesh',
+      title: 'Go Beauty Bangladesh',
+      copy: 'Curated skincare, makeup, and personal care at Gobeauty.bd.',
+      image: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=1800&q=80',
+      primary: 'Shop products',
+      secondary: 'Track order',
+      category: '',
+    },
+    {
+      eyebrow: 'Daily skincare essentials',
+      title: 'Sunscreen, serum, and barrier care',
+      copy: 'Find humidity-friendly picks with backend-verified stock and current prices.',
+      image: 'https://images.unsplash.com/photo-1556228724-4b6d2b332607?auto=format&fit=crop&w=1800&q=80',
+      primary: 'Shop skincare',
+      secondary: 'See categories',
+      category: 'Skincare',
+    },
+    {
+      eyebrow: 'Makeup for every day',
+      title: 'Soft color, easy checkout',
+      copy: 'Browse makeup favorites and pay with bKash, card, or cash on delivery.',
+      image: 'https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=1800&q=80',
+      primary: 'Shop makeup',
+      secondary: 'My account',
+      category: 'Makeup',
+    },
   ];
+  const slides = backendSlides.length ? backendSlides : fallbackSlides;
+  const slide = slides[activeSlide];
+
+  useEffect(() => {
+    setActiveSlide(0);
+  }, [slides.length]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setActiveSlide((current) => (current + 1) % slides.length);
+    }, 6500);
+    return () => window.clearInterval(timer);
+  }, [slides.length]);
 
   return (
-    <section className="capability-strip" aria-label="Backend capabilities">
-      <div>
-        <span className={`live-dot ${catalogStatus === 'ready' ? 'online' : 'standby'}`} />
-        <strong>{catalogStatus === 'ready' ? 'Live backend connected' : 'Storefront demo mode'}</strong>
+    <section className="hero" aria-label="Storefront highlights">
+      <div className="hero-media">
+        {slides.map((item, index) => (
+          <img
+            key={item.title}
+            className={index === activeSlide ? 'active' : ''}
+            src={item.image}
+            alt=""
+            aria-hidden={index !== activeSlide}
+          />
+        ))}
       </div>
-      {items.map(([title, detail]) => (
-        <div key={title}>
-          <strong>{title}</strong>
-          <span>{detail}</span>
+      <div className="hero-content">
+        <p>{slide.eyebrow}</p>
+        <h1>{slide.title}</h1>
+        <span>{slide.copy}</span>
+        <div className="hero-actions">
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => activateHeroSlide(slide, products, onProductOpen, onCategoryBrowse, onNavigate)}
+          >
+            {slide.primary}
+          </button>
+          {slide.secondary && (
+            <button type="button" className="secondary-button" onClick={() => onNavigate('account')}>
+              {slide.secondary}
+            </button>
+          )}
         </div>
-      ))}
+      </div>
+      <div className="hero-controls" aria-label="Hero carousel controls">
+        <button
+          type="button"
+          aria-label="Previous slide"
+          onClick={() => setActiveSlide((current) => (current - 1 + slides.length) % slides.length)}
+        >
+          ‹
+        </button>
+        <div>
+          {slides.map((item, index) => (
+            <button
+              key={item.title}
+              type="button"
+              className={index === activeSlide ? 'active' : ''}
+              aria-label={`Show slide ${index + 1}`}
+              onClick={() => setActiveSlide(index)}
+            />
+          ))}
+        </div>
+        <button
+          type="button"
+          aria-label="Next slide"
+          onClick={() => setActiveSlide((current) => (current + 1) % slides.length)}
+        >
+          ›
+        </button>
+      </div>
     </section>
   );
+}
+
+function activateHeroSlide(slide, products, onProductOpen, onCategoryBrowse, onNavigate) {
+  if (slide.productId) {
+    const product = products.find((item) => item.id === slide.productId);
+    if (product) {
+      onProductOpen(product);
+      return;
+    }
+  }
+
+  if (slide.category) {
+    onCategoryBrowse(slide.category);
+    return;
+  }
+
+  onNavigate('products');
 }
 
 function ProductsPage({

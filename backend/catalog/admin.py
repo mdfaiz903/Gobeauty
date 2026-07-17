@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from catalog.models import Category, Product, ProductImage
+from catalog.models import Category, HomepageSlide, Product, ProductImage
 
 
 @admin.register(Category)
@@ -40,3 +40,11 @@ class ProductAdmin(admin.ModelAdmin):
         return bool(product.image)
 
     has_image.boolean = True
+
+
+@admin.register(HomepageSlide)
+class HomepageSlideAdmin(admin.ModelAdmin):
+    list_display = ('title', 'product', 'category_link', 'sort_order', 'is_active', 'updated_at')
+    list_filter = ('is_active',)
+    search_fields = ('title', 'subtitle', 'eyebrow', 'product__name')
+    autocomplete_fields = ('product',)
