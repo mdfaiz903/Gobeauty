@@ -911,7 +911,7 @@ function Header({
   return (
     <header className="site-header">
       <div className="brand-lockup" role="button" tabIndex="0" onClick={() => onNavigate('home')}>
-        <span className="brand-mark">GB</span>
+        <SiteLogo variant="compact" />
         <span>
           <strong>Go Beauty Bangladesh</strong>
           <small>Skincare, makeup, hair & body</small>
@@ -994,6 +994,25 @@ function Header({
   );
 }
 
+function SiteLogo({ variant = 'full' }) {
+  return (
+    <span className={`site-logo ${variant}`} aria-label="Go Beauty Bangladesh">
+      <svg viewBox="0 0 92 92" role="img" aria-hidden="true" focusable="false">
+        <path d="M46 8a38 38 0 0 0 0 76V8Z" fill="#0d55ae" />
+        <path d="M46 22a31 31 0 0 1 0 62V22Z" fill="#f41cab" />
+      </svg>
+      {variant === 'full' && (
+        <span>
+          <strong>
+            <em>Go</em> Beauty
+          </strong>
+          <small>Bangladesh</small>
+        </span>
+      )}
+    </span>
+  );
+}
+
 function HomePage({
   categories,
   products,
@@ -1064,7 +1083,7 @@ function HomePage({
         </div>
         <div>
           <strong>Secure checkout</strong>
-          <span>Backend-created orders now protect product price and stock rules.</span>
+          <span>Verified by SSLCommerz-ready checkout</span>
         </div>
       </section>
     </>
@@ -2292,32 +2311,33 @@ function Footer({ onNavigate }) {
   return (
     <footer className="site-footer">
       <div className="footer-brand">
-        <span className="footer-mark">GB</span>
-        <strong>Go Beauty Bangladesh</strong>
-        <p>Authentic skincare, makeup, and personal care products for beauty shoppers across Bangladesh.</p>
+        <SiteLogo />
+        <p>Premium online shopping experience in Bangladesh. Quality skincare, cosmetics and daily essentials with fast delivery.</p>
       </div>
 
       <div className="footer-links">
-        <span>Pages</span>
+        <span>Quick Links</span>
         <button type="button" onClick={() => onNavigate('home')}>Home</button>
         <button type="button" onClick={() => onNavigate('products')}>All products</button>
+        <button type="button" onClick={() => onNavigate('products')}>Categories</button>
         <button type="button" onClick={() => onNavigate('account')}>My account</button>
         <button type="button" onClick={() => onNavigate('cart')}>Cart</button>
       </div>
 
       <div className="footer-links">
-        <span>Help</span>
-        <button type="button" onClick={() => onNavigate('account')}>Track order</button>
-        <button type="button" onClick={() => onNavigate('checkout')}>Delivery</button>
-        <button type="button" onClick={() => onNavigate('checkout')}>Payments</button>
-        <button type="button" onClick={() => onNavigate('checkout')}>Return policy</button>
+        <span>My Account</span>
+        <button type="button" onClick={() => onNavigate('account')}>My Profile</button>
+        <button type="button" onClick={() => onNavigate('account')}>My Orders</button>
+        <button type="button" onClick={() => onNavigate('cart')}>Cart</button>
+        <button type="button" onClick={() => onNavigate('checkout')}>Checkout</button>
       </div>
 
-      <form className="newsletter-form">
-        <span>Subscribe to newsletter</span>
-        <input type="email" placeholder="Enter your email" />
-        <button type="button" className="primary-button">Subscribe</button>
-      </form>
+      <div className="customer-care">
+        <span>Customer Care</span>
+        <a href="tel:+8801799749670">01799749670</a>
+        <a href="mailto:support@gobeauty.bd">support@gobeauty.bd</a>
+        <address>Dhaka, Bangladesh</address>
+      </div>
 
       <div className="payment-strip">
         <span>Pay with</span>
@@ -2326,7 +2346,7 @@ function Footer({ onNavigate }) {
             <strong key={method}>{method}</strong>
           ))}
         </div>
-        <small>Verified by SSLCommerz-ready checkout</small>
+        <small>Copyright © 2026 Go Beauty Bangladesh. All rights reserved.</small>
       </div>
     </footer>
   );

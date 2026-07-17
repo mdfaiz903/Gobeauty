@@ -96,17 +96,64 @@ img {
   min-width: 0;
 }
 
-.brand-mark {
+.site-logo {
   align-items: center;
-  background: var(--rose);
-  border-radius: 8px;
-  color: #fff;
+  display: inline-grid;
+  gap: 10px;
+  justify-items: center;
+}
+
+.site-logo svg {
+  display: block;
+}
+
+.site-logo.compact {
+  align-items: center;
   display: inline-flex;
-  flex: 0 0 46px;
-  font-weight: 900;
-  height: 46px;
   justify-content: center;
+}
+
+.site-logo.compact svg {
+  height: 48px;
+  width: 48px;
+}
+
+.site-logo.full {
+  color: var(--ink);
+  max-width: 260px;
+}
+
+.site-logo.full svg {
+  height: 94px;
+  width: 94px;
+}
+
+.site-logo.full strong {
+  display: block;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 42px;
+  font-weight: 500;
   letter-spacing: 0;
+  line-height: 0.95;
+}
+
+.site-logo.full em {
+  color: #0d55ae;
+  font-style: normal;
+}
+
+.site-logo.full strong {
+  color: #f41cab;
+}
+
+.site-logo.full small {
+  color: #5c5c5c;
+  display: block;
+  font-size: 22px;
+  letter-spacing: 0.18em;
+  line-height: 1.1;
+  margin-top: 8px;
+  text-align: center;
 }
 
 .brand-lockup strong {
@@ -1916,24 +1963,9 @@ img {
   padding: clamp(44px, 7vw, 86px) clamp(18px, 5vw, 72px) 28px;
 }
 
-.footer-brand strong {
-  display: block;
-  font-size: 22px;
-  margin-bottom: 10px;
-}
-
-.footer-mark {
-  align-items: center;
-  background: linear-gradient(135deg, var(--rose), #8b2bd9);
-  border-radius: 8px;
-  color: #fff;
-  display: inline-flex;
-  font-size: 28px;
-  font-weight: 900;
-  height: 76px;
-  justify-content: center;
+.footer-brand .site-logo {
+  justify-items: start;
   margin-bottom: 18px;
-  width: 76px;
 }
 
 .site-footer p {
@@ -1961,20 +1993,22 @@ img {
   text-align: left;
 }
 
-.newsletter-form {
+.customer-care {
   display: grid;
   gap: 14px;
+  align-content: start;
 }
 
-.newsletter-form input {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  min-height: 54px;
-  padding: 0 16px;
+.customer-care a,
+.customer-care address {
+  color: var(--muted);
+  font-style: normal;
+  line-height: 1.5;
+  text-decoration: none;
 }
 
-.newsletter-form .primary-button {
-  justify-self: start;
+.customer-care a:hover {
+  color: var(--rose-dark);
 }
 
 .payment-strip {
@@ -2165,8 +2199,7 @@ img {
 
   .hero-actions button,
   .catalog-toolbar select,
-  .account-actions button,
-  .newsletter-form .primary-button {
+  .account-actions button {
     width: 100%;
   }
 
