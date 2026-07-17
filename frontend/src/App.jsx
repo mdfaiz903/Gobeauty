@@ -315,6 +315,7 @@ export default function App() {
   const [ordersStatus, setOrdersStatus] = useState('idle');
   const [productStatus, setProductStatus] = useState('idle');
   const [checkoutState, setCheckoutState] = useState({ status: 'idle', message: '' });
+  const [pendingRedirectView, setPendingRedirectView] = useState('');
   const [paymentProvider, setPaymentProvider] = useState('bkash');
   const [paymentState, setPaymentState] = useState({
     status: 'idle',
@@ -413,6 +414,16 @@ export default function App() {
   }
 
   function navigate(nextView) {
+    if (nextView === 'checkout' && !authUser) {
+      setPendingRedirectView('checkout');
+      setAuthMessage('Login to continue checkout. Your cart is saved.');
+      setView('account');
+      setCartOpen(false);
+      setMobileMenuOpen(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
     setView(nextView);
     setCartOpen(false);
     setMobileMenuOpen(false);
@@ -486,6 +497,14 @@ export default function App() {
       setAuthMessage('Logged in successfully.');
       await loadOrders(nextTokens.access);
       setAuthStatus('idle');
+      if (pendingRedirectView) {
+        const nextView = pendingRedirectView;
+        setPendingRedirectView('');
+        setView(nextView);
+        setCartOpen(false);
+        setMobileMenuOpen(false);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
     } catch (error) {
       setAuthMessage(error.message);
       setAuthStatus('idle');
@@ -529,6 +548,22 @@ export default function App() {
           items: cart.map((item) => ({ product_id: item.id, quantity: item.qty })),
         },
       });
+      if (provider === 'cod') {
+        setCart([]);
+        setCheckoutState({
+          status: 'success',
+          message: `Order #${order.id} created. Cash on delivery selected.`,
+        });
+        setPaymentState({
+          status: 'success',
+          message: 'Cash on delivery order created.',
+          payment: null,
+          redirectUrl: '',
+        });
+        await loadOrders(tokens.access);
+        navigate('account');
+        return;
+      }
       setCheckoutState({ status: 'loading', message: 'Order created. Starting payment...' });
       const paymentSession = await initiatePayment(order.id, provider);
       setCart([]);
@@ -672,6 +707,7 @@ export default function App() {
             checkoutState={checkoutState}
             paymentProvider={paymentProvider}
             onPaymentProviderChange={setPaymentProvider}
+            user={authUser}
             isAuthenticated={Boolean(authUser)}
             onSubmit={() => createOrder(paymentProvider)}
           />
@@ -709,6 +745,7 @@ export default function App() {
 }
 
 function providerLabel(provider) {
+  if (provider === 'cod') return 'Cash on delivery';
   return provider === 'stripe' ? 'Stripe card' : 'bKash';
 }
 
@@ -1235,31 +1272,136 @@ function CheckoutPage({
   checkoutState,
   paymentProvider,
   onPaymentProviderChange,
+  user,
   isAuthenticated,
   onSubmit,
 }) {
+  const [deliveryForm, setDeliveryForm] = useState({
+    fullName: getCustomerName(user),
+    country: 'Bangladesh',
+    district: 'Dhaka',
+    thana: '',
+    address: '',
+    phone: '',
+    email: user?.email || '',
+    notes: '',
+  });
+  const [formError, setFormError] = useState('');
+
+  useEffect(() => {
+    setDeliveryForm((current) => ({
+      ...current,
+      fullName: current.fullName || getCustomerName(user),
+      email: current.email || user?.email || '',
+    }));
+  }, [user]);
+
+  function updateDeliveryField(field, value) {
+    setDeliveryForm((current) => ({ ...current, [field]: value }));
+    setFormError('');
+  }
+
+  function submitCheckout(event) {
+    event.preventDefault();
+    const requiredFields = ['fullName', 'country', 'district', 'thana', 'address', 'phone', 'email'];
+    const missingField = requiredFields.find((field) => !String(deliveryForm[field] || '').trim());
+    if (missingField) {
+      setFormError('Complete the billing and shipping fields before placing the order.');
+      return;
+    }
+    onSubmit();
+  }
+
   return (
-    <section className="checkout page-pad">
-      <div>
+    <>
+      <CheckoutRouteBar />
+      <section className="checkout page-pad">
+        <div className="checkout-main">
         <p>Secure checkout</p>
         <h1>Delivery and payment</h1>
+        <CouponNotice total={total} />
         <CheckoutProgress
           isAuthenticated={isAuthenticated}
           hasCart={cart.length > 0}
           checkoutState={checkoutState}
         />
-        <form className="checkout-form">
+        <form id="checkout-form" className="checkout-form billing-form" onSubmit={submitCheckout}>
+          <h2>Billing & shipping</h2>
           <label>
-            Full name
-            <input type="text" placeholder="Your name" disabled={!isAuthenticated} />
+            Your name <RequiredMark />
+            <input
+              type="text"
+              value={deliveryForm.fullName}
+              placeholder="Your name"
+              disabled={!isAuthenticated}
+              onChange={(event) => updateDeliveryField('fullName', event.target.value)}
+            />
           </label>
           <label>
-            Phone number
-            <input type="tel" placeholder="+880" disabled={!isAuthenticated} />
+            Country / Region <RequiredMark />
+            <select
+              value={deliveryForm.country}
+              disabled={!isAuthenticated}
+              onChange={(event) => updateDeliveryField('country', event.target.value)}
+            >
+              <option value="Bangladesh">Bangladesh</option>
+            </select>
           </label>
           <label>
-            Delivery address
-            <textarea placeholder="House, road, area, city" disabled={!isAuthenticated} />
+            District <RequiredMark />
+            <select
+              value={deliveryForm.district}
+              disabled={!isAuthenticated}
+              onChange={(event) => updateDeliveryField('district', event.target.value)}
+            >
+              {['Dhaka', 'Chattogram', 'Sylhet', 'Rajshahi', 'Khulna', 'Barishal', 'Rangpur', 'Mymensingh'].map(
+                (district) => (
+                  <option key={district} value={district}>
+                    {district}
+                  </option>
+                ),
+              )}
+            </select>
+          </label>
+          <label>
+            Thana / Police Station <RequiredMark />
+            <input
+              type="text"
+              value={deliveryForm.thana}
+              placeholder="e.g. Dhanmondi"
+              disabled={!isAuthenticated}
+              onChange={(event) => updateDeliveryField('thana', event.target.value)}
+            />
+          </label>
+          <label>
+            Address <RequiredMark />
+            <input
+              type="text"
+              value={deliveryForm.address}
+              placeholder="House, road, area, city"
+              disabled={!isAuthenticated}
+              onChange={(event) => updateDeliveryField('address', event.target.value)}
+            />
+          </label>
+          <label>
+            Phone <RequiredMark />
+            <input
+              type="tel"
+              value={deliveryForm.phone}
+              placeholder="+880"
+              disabled={!isAuthenticated}
+              onChange={(event) => updateDeliveryField('phone', event.target.value)}
+            />
+          </label>
+          <label>
+            Email address <RequiredMark />
+            <input
+              type="email"
+              value={deliveryForm.email}
+              placeholder="name@email.com"
+              disabled={!isAuthenticated}
+              onChange={(event) => updateDeliveryField('email', event.target.value)}
+            />
           </label>
           <label>
             Payment method
@@ -1269,23 +1411,124 @@ function CheckoutPage({
               disabled={!isAuthenticated}
             />
           </label>
-          <PaymentFlowPreview provider={paymentProvider} />
+          <h2>Additional information</h2>
+          <label>
+            Order notes <span className="optional-text">optional</span>
+            <textarea
+              value={deliveryForm.notes}
+              placeholder="Notes about your order, e.g. special notes for delivery."
+              disabled={!isAuthenticated}
+              onChange={(event) => updateDeliveryField('notes', event.target.value)}
+            />
+          </label>
+          {formError && <p className="form-message error">{formError}</p>}
           {checkoutState.message && <p className="form-message">{checkoutState.message}</p>}
-          <button
-            type="button"
-            className="primary-button wide"
-            disabled={!cart.length || checkoutState.status === 'loading'}
-            onClick={onSubmit}
-          >
-            {checkoutState.status === 'loading' ? 'Creating order...' : 'Place order'}
-          </button>
         </form>
       </div>
       <div className="checkout-side">
-        <OrderSummary total={total} readonly />
-        <CheckoutReview cart={cart} />
+        <CheckoutOrderPanel
+          cart={cart}
+          total={total}
+          checkoutState={checkoutState}
+          paymentProvider={paymentProvider}
+        />
       </div>
     </section>
+    </>
+  );
+}
+
+function CheckoutRouteBar() {
+  return (
+    <div className="checkout-route-bar">
+      <span>Shopping cart</span>
+      <strong>Checkout</strong>
+      <span>Order complete</span>
+    </div>
+  );
+}
+
+function RequiredMark() {
+  return <span className="required-mark">*</span>;
+}
+
+function CouponNotice({ total }) {
+  const remaining = Math.max(0, 2500 - total);
+  const percent = Math.min(100, Math.round((total / 2500) * 100));
+
+  return (
+    <div className="coupon-notice">
+      <small>
+        Have a coupon? <button type="button">Click here to enter your code</button>
+      </small>
+      <div>
+        <span>{remaining ? `Add ${formatPrice(remaining)} to cart and get Free delivery!` : 'Free delivery unlocked.'}</span>
+        <strong>
+          <i style={{ width: `${percent}%` }} />
+        </strong>
+      </div>
+    </div>
+  );
+}
+
+function CheckoutOrderPanel({ cart, total, checkoutState, paymentProvider }) {
+  const delivery = total > 0 && total < 2500 ? 80 : 0;
+  const grandTotal = total + delivery;
+  const paymentLabel = providerLabel(paymentProvider);
+  const paymentCopy = {
+    bkash: 'You will continue to the secure bKash payment flow after placing the order.',
+    stripe: 'You will continue to the secure card checkout after placing the order.',
+    cod: 'Pay with cash when your order is delivered.',
+  }[paymentProvider];
+
+  return (
+    <aside className="checkout-order-panel">
+      <h2>Your order</h2>
+      <div className="order-card">
+        <div className="order-table-head">
+          <span>Product</span>
+          <span>Subtotal</span>
+        </div>
+        <div className="checkout-order-items">
+          {cart.map((item) => (
+            <div key={item.id}>
+              <span>
+                {item.name} <strong>x {item.qty}</strong>
+              </span>
+              <span>{formatPrice(item.price * item.qty)}</span>
+            </div>
+          ))}
+        </div>
+        <div className="order-total-row">
+          <span>Subtotal</span>
+          <strong>{formatPrice(total)}</strong>
+        </div>
+        <div className="order-total-row">
+          <span>Shipment</span>
+          <strong>{delivery ? `Flat rate: ${formatPrice(delivery)}` : 'Free'}</strong>
+        </div>
+        <div className="order-total-row grand">
+          <span>Total</span>
+          <strong>{formatPrice(grandTotal)}</strong>
+        </div>
+      </div>
+      <div className="order-payment-note">
+        <strong>{paymentLabel}</strong>
+        <p>{paymentCopy}</p>
+      </div>
+      <p className="privacy-note">
+        Your personal data will be used to process your order, support your experience, and for
+        other purposes described in our privacy policy.
+      </p>
+      <button
+        type="submit"
+        form="checkout-form"
+        className="primary-button wide checkout-place-button"
+        disabled={!cart.length || checkoutState.status === 'loading'}
+      >
+        {checkoutState.status === 'loading' ? 'Creating order...' : 'Place order'}
+      </button>
+    </aside>
   );
 }
 
@@ -1308,31 +1551,6 @@ function CheckoutProgress({ isAuthenticated, hasCart, checkoutState }) {
   );
 }
 
-function CheckoutReview({ cart }) {
-  if (!cart.length) {
-    return (
-      <div className="checkout-review">
-        <strong>No cart items</strong>
-        <span>Add products before placing an order.</span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="checkout-review">
-      <strong>Backend order payload</strong>
-      <span>Only product IDs and quantities are sent. Prices are recalculated server-side.</span>
-      {cart.slice(0, 3).map((item) => (
-        <div key={item.id}>
-          <small>{item.qty} x</small>
-          <span>{item.name}</span>
-        </div>
-      ))}
-      {cart.length > 3 && <em>+{cart.length - 3} more items</em>}
-    </div>
-  );
-}
-
 function PaymentMethodSelector({ value, onChange, disabled }) {
   const providers = [
     {
@@ -1344,6 +1562,11 @@ function PaymentMethodSelector({ value, onChange, disabled }) {
       key: 'stripe',
       name: 'Stripe card',
       detail: 'Creates a checkout session; final success is confirmed by webhook.',
+    },
+    {
+      key: 'cod',
+      name: 'Cash on delivery',
+      detail: 'Place the order now and pay when the products arrive.',
     },
   ];
 
@@ -1361,24 +1584,6 @@ function PaymentMethodSelector({ value, onChange, disabled }) {
           <span>{provider.detail}</span>
         </button>
       ))}
-    </div>
-  );
-}
-
-function PaymentFlowPreview({ provider }) {
-  const steps =
-    provider === 'stripe'
-      ? ['Backend creates order', 'Stripe strategy creates checkout session', 'Webhook confirms payment and stock']
-      : ['Backend creates order', 'bKash strategy creates sandbox payment', 'Execute callback confirms payment and stock'];
-
-  return (
-    <div className="payment-flow-card">
-      <strong>{providerLabel(provider)} payment flow</strong>
-      <ol>
-        {steps.map((step) => (
-          <li key={step}>{step}</li>
-        ))}
-      </ol>
     </div>
   );
 }
