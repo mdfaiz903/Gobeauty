@@ -2,6 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api';
 const TOKEN_STORAGE_KEY = 'gobeauty.auth.tokens';
+const VIEW_PATHS = {
+  home: '/',
+  products: '/products/',
+  cart: '/cart/',
+  checkout: '/checkout/',
+  account: '/account/',
+};
 
 const fallbackCategories = [
   {
@@ -250,6 +257,29 @@ function slugify(value) {
     .replace(/(^-|-$)/g, '');
 }
 
+function pathForView(view, product = null) {
+  if (view === 'product' && product) return `/product/${product.slug || slugify(product.name)}/`;
+  return VIEW_PATHS[view] || '/';
+}
+
+function viewFromPath(pathname) {
+  const path = pathname.replace(/\/+$/, '') || '/';
+  if (path === '/') return { view: 'home' };
+  if (path === '/products') return { view: 'products' };
+  if (path === '/cart') return { view: 'cart' };
+  if (path === '/checkout') return { view: 'checkout' };
+  if (path === '/account') return { view: 'account' };
+  if (path.startsWith('/product/')) {
+    return { view: 'product', productSlug: path.split('/')[2] || '' };
+  }
+  return { view: 'home' };
+}
+
+function pushRoute(path) {
+  if (window.location.pathname === path) return;
+  window.history.pushState({}, '', path);
+}
+
 function enrichProduct(product) {
   const categoryName = product.category?.name || product.category || 'Skincare';
   const price = Number(product.price || 0);
@@ -323,7 +353,9 @@ function buildCategoryTree(apiCategories) {
 }
 
 export default function App() {
-  const [view, setView] = useState('home');
+  const initialRoute = viewFromPath(window.location.pathname);
+  const [view, setView] = useState(initialRoute.view);
+  const [routeProductSlug, setRouteProductSlug] = useState(initialRoute.productSlug || '');
   const [filters, setFilters] = useState(filtersInitial);
   const [categories, setCategories] = useState(fallbackCategories);
   const [products, setProducts] = useState(fallbackProducts);
@@ -391,9 +423,43 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    function syncRouteFromHistory() {
+      const nextRoute = viewFromPath(window.location.pathname);
+      setView(nextRoute.view);
+      setRouteProductSlug(nextRoute.productSlug || '');
+      setCartOpen(false);
+      setMobileMenuOpen(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    window.addEventListener('popstate', syncRouteFromHistory);
+    return () => window.removeEventListener('popstate', syncRouteFromHistory);
+  }, []);
+
+  useEffect(() => {
     if (!tokens?.access) return;
     loadCurrentUser(tokens.access);
   }, [tokens]);
+
+  useEffect(() => {
+    if (view !== 'checkout' || authUser || tokens?.access) return;
+    setPendingRedirectView('checkout');
+    setAuthMessage('Login to continue checkout. Your cart is saved.');
+    navigate('account');
+  }, [authUser, tokens, view]);
+
+  useEffect(() => {
+    if (view !== 'product' || !routeProductSlug) return;
+    if (catalogStatus === 'loading') return;
+    const routeProduct = products.find((product) => product.slug === routeProductSlug);
+    if (routeProduct) {
+      openProduct(routeProduct, { push: false });
+      return;
+    }
+
+    setView('products');
+    pushRoute('/products/');
+  }, [catalogStatus, products, routeProductSlug, view]);
 
   async function loadCatalog() {
     setCatalogStatus('loading');
@@ -444,11 +510,12 @@ export default function App() {
     }
   }
 
-  function navigate(nextView) {
+  function navigate(nextView, options = {}) {
     if (nextView === 'checkout' && !authUser) {
       setPendingRedirectView('checkout');
       setAuthMessage('Login to continue checkout. Your cart is saved.');
       setView('account');
+      pushRoute('/account/');
       setCartOpen(false);
       setMobileMenuOpen(false);
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -456,6 +523,7 @@ export default function App() {
     }
 
     setView(nextView);
+    if (options.push !== false) pushRoute(pathForView(nextView, options.product));
     setCartOpen(false);
     setMobileMenuOpen(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -471,12 +539,13 @@ export default function App() {
     navigate('products');
   }
 
-  async function openProduct(product) {
+  async function openProduct(product, options = {}) {
     const fallbackRelated = products.filter((item) => item.id !== product.id).slice(0, 3);
     setSelectedProduct(product);
+    setRouteProductSlug(product.slug);
     setRelatedProducts(fallbackRelated);
     setProductStatus('loading');
-    navigate('product');
+    navigate('product', { product, push: options.push });
 
     try {
       const [detailData, recommendationData] = await Promise.all([
@@ -531,10 +600,9 @@ export default function App() {
       if (pendingRedirectView) {
         const nextView = pendingRedirectView;
         setPendingRedirectView('');
-        setView(nextView);
+        navigate(nextView);
         setCartOpen(false);
         setMobileMenuOpen(false);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     } catch (error) {
       setAuthMessage(error.message);
