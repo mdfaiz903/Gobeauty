@@ -712,6 +712,30 @@ function providerLabel(provider) {
   return provider === 'stripe' ? 'Stripe card' : 'bKash';
 }
 
+function statusLabel(status) {
+  const labels = {
+    pending: 'Pending',
+    paid: 'Paid',
+    canceled: 'Canceled',
+    initiated: 'Initiated',
+    succeeded: 'Succeeded',
+    failed: 'Failed',
+  };
+  return labels[status] || status || 'Pending';
+}
+
+function statusTone(status) {
+  if (['paid', 'succeeded'].includes(status)) return 'success';
+  if (['failed', 'canceled', 'cancelled'].includes(status)) return 'danger';
+  return 'pending';
+}
+
+function stockMessage(product) {
+  if (product.stock === 0) return 'Out of stock';
+  if (product.stock <= 5) return `Only ${product.stock} left`;
+  return `${product.stock} in stock`;
+}
+
 function TopNotice() {
   return (
     <div className="top-notice">
@@ -878,6 +902,8 @@ function HomePage({
         />
       )}
 
+      <BackendCapabilityStrip catalogStatus={catalogStatus} />
+
       <section className="category-strip">
         {categories.map((category) => (
           <button
@@ -920,6 +946,30 @@ function HomePage({
         </div>
       </section>
     </>
+  );
+}
+
+function BackendCapabilityStrip({ catalogStatus }) {
+  const items = [
+    ['Email JWT auth', 'Custom user model'],
+    ['DFS recommendations', 'Redis category tree'],
+    ['Server totals', 'Order item snapshots'],
+    ['Payment strategies', 'Stripe + bKash'],
+  ];
+
+  return (
+    <section className="capability-strip" aria-label="Backend capabilities">
+      <div>
+        <span className={`live-dot ${catalogStatus === 'ready' ? 'online' : 'standby'}`} />
+        <strong>{catalogStatus === 'ready' ? 'Live backend connected' : 'Storefront demo mode'}</strong>
+      </div>
+      {items.map(([title, detail]) => (
+        <div key={title}>
+          <strong>{title}</strong>
+          <span>{detail}</span>
+        </div>
+      ))}
+    </section>
   );
 }
 
@@ -1085,6 +1135,10 @@ function ProductCard({ product, onOpen, onAdd }) {
           <strong>{formatPrice(product.price)}</strong>
           <span>{formatPrice(product.compareAt)}</span>
         </div>
+        <div className={`stock-line ${product.stock <= 5 ? 'low' : ''}`}>
+          <span>{stockMessage(product)}</span>
+          <small>SKU {product.sku}</small>
+        </div>
         <button className="add-button" type="button" disabled={product.stock === 0} onClick={onAdd}>
           {product.stock === 0 ? 'Out of stock' : 'Add to cart'}
         </button>
@@ -1189,6 +1243,11 @@ function CheckoutPage({
       <div>
         <p>Secure checkout</p>
         <h1>Delivery and payment</h1>
+        <CheckoutProgress
+          isAuthenticated={isAuthenticated}
+          hasCart={cart.length > 0}
+          checkoutState={checkoutState}
+        />
         <form className="checkout-form">
           <label>
             Full name
@@ -1222,8 +1281,55 @@ function CheckoutPage({
           </button>
         </form>
       </div>
-      <OrderSummary total={total} readonly />
+      <div className="checkout-side">
+        <OrderSummary total={total} readonly />
+        <CheckoutReview cart={cart} />
+      </div>
     </section>
+  );
+}
+
+function CheckoutProgress({ isAuthenticated, hasCart, checkoutState }) {
+  const steps = [
+    ['Account', isAuthenticated],
+    ['Cart', hasCart],
+    ['Payment', checkoutState.status === 'success'],
+  ];
+
+  return (
+    <div className="checkout-progress" aria-label="Checkout progress">
+      {steps.map(([label, done], index) => (
+        <div key={label} className={done ? 'done' : ''}>
+          <span>{done ? 'OK' : index + 1}</span>
+          <strong>{label}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CheckoutReview({ cart }) {
+  if (!cart.length) {
+    return (
+      <div className="checkout-review">
+        <strong>No cart items</strong>
+        <span>Add products before placing an order.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="checkout-review">
+      <strong>Backend order payload</strong>
+      <span>Only product IDs and quantities are sent. Prices are recalculated server-side.</span>
+      {cart.slice(0, 3).map((item) => (
+        <div key={item.id}>
+          <small>{item.qty} x</small>
+          <span>{item.name}</span>
+        </div>
+      ))}
+      {cart.length > 3 && <em>+{cart.length - 3} more items</em>}
+    </div>
   );
 }
 
@@ -1293,8 +1399,9 @@ function getInitials(user) {
 
 function getOrderStats(orders) {
   const totalSpent = orders.reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
-  const activeOrders = orders.filter((order) => !['delivered', 'cancelled'].includes(order.status)).length;
-  return { totalSpent, activeOrders };
+  const paidOrders = orders.filter((order) => order.status === 'paid').length;
+  const pendingOrders = orders.filter((order) => order.status === 'pending').length;
+  return { totalSpent, paidOrders, pendingOrders };
 }
 
 function AccountPage({
@@ -1372,8 +1479,9 @@ function AccountPage({
 
         <div className="dashboard-stats">
           <StatCard label="Orders" value={orders.length} note="Created from backend checkout" />
-          <StatCard label="Active" value={orderStats.activeOrders} note="Processing or pending orders" />
-          <StatCard label="Spent" value={formatPrice(orderStats.totalSpent)} note="Total successful order value" />
+          <StatCard label="Pending" value={orderStats.pendingOrders} note="Waiting for payment success" />
+          <StatCard label="Paid" value={orderStats.paidOrders} note="Payment finalized with stock lock" />
+          <StatCard label="Value" value={formatPrice(orderStats.totalSpent)} note="Backend order totals" />
           <StatCard label="Role" value={user.role || 'customer'} note="Account permission level" />
         </div>
 
@@ -1493,7 +1601,7 @@ function PaymentStatusCard({ paymentState, onBkashQuery, onBkashExecute }) {
         </div>
         <div>
           <span>Status</span>
-          <strong>{payment.status}</strong>
+          <strong className={`status-pill ${statusTone(payment.status)}`}>{statusLabel(payment.status)}</strong>
         </div>
         <div>
           <span>Transaction</span>
@@ -1550,11 +1658,22 @@ function OrderHistory({ orders, ordersStatus }) {
       )}
       {orders.map((order) => (
         <article key={order.id}>
-          <strong>Order #{order.id}</strong>
-          <span>{order.status}</span>
+          <div className="order-title-row">
+            <strong>Order #{order.id}</strong>
+            <span className={`status-pill ${statusTone(order.status)}`}>{statusLabel(order.status)}</span>
+          </div>
           <p>
             {order.items?.length || 0} items - total {formatPrice(order.total_amount)}
           </p>
+          {!!order.items?.length && (
+            <div className="order-item-list">
+              {order.items.slice(0, 2).map((item) => (
+                <small key={item.id || item.product_id}>
+                  {item.quantity} x {item.product_name || item.product_sku}
+                </small>
+              ))}
+            </div>
+          )}
         </article>
       ))}
     </div>
